@@ -35,35 +35,37 @@ def log_scan_result(symbol, result):
 
 
 def scan_once():
-    exchange = market_data.build_exchange(config.EXCHANGE_ID)
+    chain = market_data.build_chain(config.EXCHANGE_ID)
+    fetch = market_data.make_fetcher(chain)
     symbols = config.SYMBOLS
     btc_m15 = None
+    btc_src = None
     signals = []
+    scanned = 0
+    failed = 0
 
     for symbol in symbols:
-        log.info("Memindai %s di %s ...", symbol, exchange.id.upper())
+        log.info("Memindai %s ...", symbol)
         try:
             if symbol == config.BTC_SYMBOL:
-                btc_m15 = market_data.closed_candles(
-                    market_data.fetch_ohlcv(exchange, symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                )
+                btc_m15, btc_src = fetch(symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
+                btc_m15 = market_data.closed_candles(btc_m15)
                 m15 = btc_m15
             else:
                 if btc_m15 is None and config.BTC_SYMBOL in symbols:
-                    btc_m15 = market_data.closed_candles(
-                        market_data.fetch_ohlcv(exchange, config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                    )
-                m15 = market_data.closed_candles(
-                    market_data.fetch_ohlcv(exchange, symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                )
-            if btc_m15 is None:
-                btc_m15 = market_data.closed_candles(
-                    market_data.fetch_ohlcv(exchange, config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                )
-            h1 = market_data.closed_candles(
-                market_data.fetch_ohlcv(exchange, symbol, config.TIMEFRAME_HIGHER, config.H1_CANDLE_COUNT)
-            )
+                    btc_m15, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
+                    btc_m15 = market_data.closed_candles(btc_m15)
+                if btc_m15 is None:
+                    btc_m15, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
+                    btc_m15 = market_data.closed_candles(btc_m15)
+                m15, m15_src = fetch(symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
+                m15 = market_data.closed_candles(m15)
+            h1, h1_src = fetch(symbol, config.TIMEFRAME_HIGHER, config.H1_CANDLE_COUNT)
+            h1 = market_data.closed_candles(h1)
+            scanned += 1
+            log.info("  Sumber data: %s", m15_src if symbol != config.BTC_SYMBOL else btc_src)
         except Exception as exc:
+            failed += 1
             log.error("Gagal mengambil data %s: %s", symbol, exc)
             continue
 
@@ -83,6 +85,9 @@ def scan_once():
 
     if not signals:
         log.info("Tidak ada sinyal. Semua aset STANDBY.")
+    if scanned == 0 and failed > 0:
+        log.error("SEMUA bursa gagal menyediakan data (%d symbol). Siklus gagal.", failed)
+        raise RuntimeError("Semua bursa tidak dapat dihubungi untuk mengambil data.")
     return signals
 
 

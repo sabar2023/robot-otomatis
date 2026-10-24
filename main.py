@@ -23,7 +23,7 @@ def setup_logging():
 
 
 def log_scan_result(symbol, result):
-    status = "SINYAL LONG" if result["passed"] else "STANDBY"
+    status = f"SINYAL {result['direction']}" if result["passed"] else "STANDBY"
     log.info("%s | %s | harga=%s ATR=%s", symbol, status, f"{result['price']:,.2f}", f"{result['atr']:,.2f}")
     for layer in result["layers"]:
         mark = "PASS" if layer["passed"] else "FAIL"
@@ -80,7 +80,7 @@ def scan_once():
             log.info("  Sinyal %s berbasis candle %s (umur %.1f menit) — basi untuk scalping, dilewati.", symbol, candle_close.strftime("%H:%M"), age_minutes)
             continue
         if result["passed"]:
-            levels = risk.compute_levels(result["price"], result["atr"])
+            levels = risk.compute_levels(result["direction"], result["price"], result["atr"])
             signals.append({"result": result, "levels": levels})
 
     for signal in signals:

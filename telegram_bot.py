@@ -19,39 +19,94 @@ def build_alert_html(result, levels):
     d3 = result["layers"][2]["detail"]
     d4 = result["layers"][3]["detail"]
     price = result["price"]
+    is_long = levels["direction"] == "LONG"
 
-    if d2["near_support"]:
-        dist = abs(price - d2["support"]) / d2["support"] * 100.0
-        zone_line = (
-            f"Harga {fmt_price(price)} memantul {dist:.1f}% di atas support {fmt_price(d2['support'])} "
-            f"(swing low 20 candle M15) dan tetap di atas VWAP {fmt_price(d2['vwap'])} "
-            f"— area beli berisiko rendah di zona kunci."
+    if is_long:
+        pos_line = "&#128994; <b>POSISI</b>   : LONG (BUY)"
+        if d2["near_support"]:
+            dist = abs(price - d2["support"]) / d2["support"] * 100.0
+            zone_line = (
+                f"Harga {fmt_price(price)} memantul {dist:.1f}% di atas support {fmt_price(d2['support'])} "
+                f"(swing low 20 candle M15) dan tetap di atas VWAP {fmt_price(d2['vwap'])} "
+                f"— area beli berisiko rendah di zona kunci."
+            )
+            zone_short = f"Pantulan Support {fmt_price(d2['support'])}"
+        else:
+            zone_line = (
+                f"Harga baru saja close di atas resistance {fmt_price(d2['resistance'])} — "
+                f"konfirmasi penguatan breakout, divalidasi VWAP {fmt_price(d2['vwap'])} di bawah harga."
+            )
+            zone_short = f"Breakout Resistance {fmt_price(d2['resistance'])}"
+        if d3["bounce"]:
+            mom_line = (
+                f"RSI ({d3['rsi']:.0f}) baru crossing naik dari area oversold (&lt;30) — "
+                f"awal pembalikan momentum, masih sisi awal gelombang."
+            )
+            mom_short = "RSI naik dari oversold"
+        else:
+            mom_line = (
+                f"RSI ({d3['rsi']:.0f}) di atas 50 — momentum beli dominan."
+            )
+            mom_short = "RSI kuat di atas 50"
+        trend_line = (
+            f"M15 close di atas EMA{config.EMA_TREND_M15} dan H1 close di atas EMA{config.EMA_TREND_H1} — "
+            f"mengikuti tren institusi; melawan tren adalah penyebab utama scalping gagal."
+        )
+        trend_short = f"M15 &gt; EMA{config.EMA_TREND_M15}, H1 &gt; EMA{config.EMA_TREND_H1}"
+        vol_line = (
+            f"Volume {d3['volume_ratio']:.1f}x rata-rata 20 candle — ada penyerapan/akumulasi "
+            f"yang mendukung gerak naik, mengurangi risiko fakeout."
+        )
+        risk_line = (
+            f"SL {config.ATR_SL_MULT:g}x ATR ({fmt_price(result['atr'])}) di bawah entry mengikuti volatilitas riil; "
+            f"TP {config.ATR_TP_MULT:g}x ATR menghasilkan RR 1:2 — rugi kecil, profit target besar."
         )
     else:
-        zone_line = (
-            f"Harga baru saja close di atas resistance {fmt_price(d2['resistance'])} — "
-            f"konfirmasi penguatan breakout, divalidasi VWAP {fmt_price(d2['vwap'])} di bawah harga."
+        pos_line = "&#128308; <b>POSISI</b>   : SHORT (SELL)"
+        if d2["near_support"]:
+            dist = abs(d2["resistance"] - price) / d2["resistance"] * 100.0
+            zone_line = (
+                f"Harga {fmt_price(price)} tertahan {dist:.1f}% di bawah resistance {fmt_price(d2['resistance'])} "
+                f"(swing high 20 candle M15) dan di bawah VWAP {fmt_price(d2['vwap'])} "
+                f"— area jual berisiko rendah di zona kunci."
+            )
+            zone_short = f"Pantulan Resistance {fmt_price(d2['resistance'])}"
+        else:
+            zone_line = (
+                f"Harga baru saja close di bawah support {fmt_price(d2['support'])} — "
+                f"konfirmasi pelemahan breakdown, divalidasi VWAP {fmt_price(d2['vwap'])} di atas harga."
+            )
+            zone_short = f"Breakdown Support {fmt_price(d2['support'])}"
+        if d3["bounce"]:
+            mom_line = (
+                f"RSI ({d3['rsi']:.0f}) baru crossing turun dari area overbought (&gt;70) — "
+                f"awal pembalikan bearish, masih sisi awal gelombang turun."
+            )
+            mom_short = "RSI turun dari overbought"
+        else:
+            mom_line = (
+                f"RSI ({d3['rsi']:.0f}) di bawah 50 — momentum jual dominan."
+            )
+            mom_short = "RSI lemah di bawah 50"
+        trend_line = (
+            f"M15 close di bawah EMA{config.EMA_TREND_M15} dan H1 close di bawah EMA{config.EMA_TREND_H1} — "
+            f"mengikuti tren turun institusi; melawan tren adalah penyebab utama short gagal."
+        )
+        trend_short = f"M15 &lt; EMA{config.EMA_TREND_M15}, H1 &lt; EMA{config.EMA_TREND_H1}"
+        vol_line = (
+            f"Volume {d3['volume_ratio']:.1f}x rata-rata 20 candle — ada tekanan jual yang tervalidasi, "
+            f"bukan penurunan sepi volume."
+        )
+        risk_line = (
+            f"SL {config.ATR_SL_MULT:g}x ATR ({fmt_price(result['atr'])}) di atas entry mengikuti volatilitas riil; "
+            f"TP {config.ATR_TP_MULT:g}x ATR di bawah menghasilkan RR 1:2."
         )
 
-    if d3["bounce"]:
-        mom_line = (
-            f"RSI ({d3['rsi']:.0f}) baru crossing naik dari area oversold (&lt;30) — "
-            f"awal pembalikan momentum, masih masuk disisi awal gelombang."
-        )
-    else:
-        mom_line = (
-            f"RSI ({d3['rsi']:.0f}) di atas 50 — momentum beli dominan, "
-            f"bukan kejaran puncak karena volume masih sehat."
-        )
+    vol_and_mom_short = f"{mom_short}, Volume {d3['volume_ratio']:.1f}x SMA{config.VOLUME_SMA_PERIOD}"
 
-    vol_line = (
-        f"Volume {d3['volume_ratio']:.1f}x rata-rata 20 candle — ada penyerapan/akumulasi "
-        f"yang mendukung gerak, mengurangi risiko fakeout."
-    )
-
-    trend_line = (
-        f"M15 close di atas EMA{config.EMA_TREND_M15} dan H1 close di atas EMA{config.EMA_TREND_H1} — "
-        f"mengikuti tren institusi; melawan tren adalah penyebab utama scalping gagal."
+    leverage_line = (
+        f"&#9881; <b>LEVERAGE</b>   : {levels['leverage']}x "
+        f"(jarak SL {levels['sl_distance_pct']:.2f}%, risiko max ±{config.RISK_PER_TRADE_PCT:g}% margin saat SL kena)"
     )
 
     explanation = [
@@ -63,33 +118,51 @@ def build_alert_html(result, levels):
     ]
     if result["is_altcoin"]:
         d5 = result["layers"][4]["detail"]
-        explanation.append(
-            f"&#8226; BTC: {fmt_price(d5['btc_close'])} &gt; EMA{config.EMA_TREND_M15} "
-            f"({fmt_price(d5['btc_ema200'])}) dan tidak breaking support — "
-            f"'penguasa pasar' searah, pergerakan altcoin lebih aman."
+        if is_long:
+            explanation.append(
+                f"&#8226; BTC: {fmt_price(d5['btc_close'])} &gt; EMA{config.EMA_TREND_M15} "
+                f"({fmt_price(d5['btc_ema200'])}) dan tidak breaking support — "
+                f"'penguasa pasar' searah, pergerakan altcoin lebih aman."
+            )
+        else:
+            explanation.append(
+                f"&#8226; BTC: {fmt_price(d5['btc_close'])} tidak breakout resistance "
+                f"({fmt_price(d5['btc_resistance'])}) dan di bawah EMA{config.EMA_TREND_M15} "
+                f"{fmt_price(d5['btc_ema200'])} +{config.BTC_FAR_BELOW_EMA_PCT:g}% — "
+                f"'penguasa pasar' tidak melawan posisi short."
+            )
+    explanation.append(f"&#8226; Risiko: {risk_line}")
+
+    if is_long:
+        trend_bullet = (
+            f"- Tren: Multi-TF Bullish (M15 &gt; EMA{config.EMA_TREND_M15}, H1 &gt; EMA{config.EMA_TREND_H1})."
         )
-    explanation.append(
-        f"&#8226; Risiko: SL 1.5x ATR ({fmt_price(result['atr'])}) mengikuti volatilitas riil pasar; "
-        f"TP 3.0x ATR menghasilkan RR 1:2 — rugi kecil, profit target besar."
-    )
+    else:
+        trend_bullet = (
+            f"- Tren: Multi-TF Bearish (M15 &lt; EMA{config.EMA_TREND_M15}, H1 &lt; EMA{config.EMA_TREND_H1})."
+        )
+    btc_bullet_long = (
+        f"- BTC: Sejalan (BTC/USDT {fmt_price(d5['btc_close']) if result['is_altcoin'] else '-'} "
+        f"&gt; EMA{config.EMA_TREND_M15})."
+    ) if is_long else None
 
     lines = [
         "&#128680; <b>BRANDBISNIS SCALP ALERT</b> &#128680;",
-        f"&#9200; <i>Timeframe:</i> 15 Menit (M15)",
+        f"&#9200; <i>Timeframe:</i> 15 Menit (M15) | <i>Mode:</i> Futures Standard",
         "",
         f"&#128200; <b>PASANGAN</b> : {result['symbol']}",
-        "&#128994; <b>POSISI</b>   : LONG (BUY)",
+        pos_line,
         "",
-        f"&#127919; <b>ENTRY</b>    : {fmt_price(levels['entry_low'])} - {fmt_price(levels['entry_high'])}",
+        f"&#127919; <b>ENTRY</b>    : {fmt_price(levels['entry_low'])} - {fmt_price(levels['entry_high'])} "
+        f"({'di atas harga sinyal' if is_long else 'di bawah harga sinyal'})",
         f"&#128721; <b>STOP LOSS</b>: {fmt_price(levels['stop_loss'])} ({config.ATR_SL_MULT:g}x ATR)",
-        f"&#9989; <b>TAKE PROFIT</b>: {fmt_price(levels['take_profit'])} (RR 1:{levels['rr']:.0f})",
+        f"&#9989; <b>TAKE PROFIT</b>: {fmt_price(levels['take_profit'])} (RR 1:2)",
+        leverage_line,
         "",
         "&#128202; <b>Analisis AI Teknikal:</b>",
-        f"- Tren: Multi-TF Bullish (M15 &gt; EMA{config.EMA_TREND_M15}, H1 &gt; EMA{config.EMA_TREND_H1}).",
-        f"- Zona: {'Pantulan Support terkonfirmasi' if d2['near_support'] else 'Breakout Resistance terkonfirmasi'} "
-        f"(S {fmt_price(d2['support'])} / R {fmt_price(d2['resistance'])}) + Price &gt; VWAP {fmt_price(d2['vwap'])}.",
-        f"- Vol &amp; Mom: RSI ({d3['rsi']:.0f}) {'naik dari oversold' if d3['bounce'] else 'tren kuat di atas 50'}, "
-        f"Volume {d3['volume_ratio']:.1f}x SMA{config.VOLUME_SMA_PERIOD}.",
+        trend_bullet,
+        f"- Zona: {zone_short} + Price {'&gt;' if is_long else '&lt;'} VWAP {fmt_price(d2['vwap'])}.",
+        f"- Vol &amp; Mom: {vol_and_mom_short}.",
         f"- ADX ({d4['adx']:.0f}) &gt; {config.ADX_MIN} (Strong Trend).",
         "",
     ]

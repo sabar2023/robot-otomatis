@@ -1,0 +1,15 @@
+{
+  "name": "brandbisnis-cloudflare",
+  "private": true,
+  "version": "4.0.0",
+  "scripts": {
+    "d1:create": "wrangler d1 create brandbisnis",
+    "d1:init": "wrangler d1 execute brandbisnis --file=./schema.sql --remote",
+    "r2:create": "wrangler r2 bucket create brandbisnis-backups",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

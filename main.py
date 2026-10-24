@@ -35,6 +35,7 @@ def log_scan_result(symbol, result):
 
 
 def scan_once():
+    now = dt.datetime.now(dt.timezone.utc)
     chain = market_data.build_chain(config.EXCHANGE_ID)
     fetch = market_data.make_fetcher(chain)
     symbols = config.SYMBOLS
@@ -48,16 +49,16 @@ def scan_once():
         log.info("Memindai %s ...", symbol)
         try:
             if symbol == config.BTC_SYMBOL:
-                btc_m15, btc_src = fetch(symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                btc_m15 = market_data.closed_candles(btc_m15)
+                btc_raw, btc_src = fetch(symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
+                btc_m15 = market_data.closed_candles(btc_raw)
                 m15 = btc_m15
             else:
                 if btc_m15 is None and config.BTC_SYMBOL in symbols:
-                    btc_m15, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                    btc_m15 = market_data.closed_candles(btc_m15)
+                    btc_raw, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
+                    btc_m15 = market_data.closed_candles(btc_raw)
                 if btc_m15 is None:
-                    btc_m15, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                    btc_m15 = market_data.closed_candles(btc_m15)
+                    btc_raw, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
+                    btc_m15 = market_data.closed_candles(btc_raw)
                 m15, m15_src = fetch(symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
                 m15 = market_data.closed_candles(m15)
             h1, h1_src = fetch(symbol, config.TIMEFRAME_HIGHER, config.H1_CANDLE_COUNT)
@@ -69,8 +70,15 @@ def scan_once():
             log.error("Gagal mengambil data %s: %s", symbol, exc)
             continue
 
+        candle_close = m15["ts"].iloc[-1] + dt.timedelta(minutes=15)
+        age_minutes = (now - candle_close).total_seconds() / 60.0
+        fresh = age_minutes <= config.FRESH_CANDLE_MAX_AGE_MINUTES
+
         result = filters.evaluate(symbol, m15, h1, btc_m15, is_altcoin=symbol != config.BTC_SYMBOL)
         log_scan_result(symbol, result)
+        if result["passed"] and not fresh:
+            log.info("  Sinyal %s berbasis candle %s (umur %.1f menit) — basi untuk scalping, dilewati.", symbol, candle_close.strftime("%H:%M"), age_minutes)
+            continue
         if result["passed"]:
             levels = risk.compute_levels(result["price"], result["atr"])
             signals.append({"result": result, "levels": levels})
@@ -92,8 +100,9 @@ def scan_once():
 
 
 def next_boundary(now):
-    minute = (now.minute // 15) * 15
-    target = now.replace(minute=minute, second=0, microsecond=0) + dt.timedelta(minutes=15)
+    interval = config.SCAN_INTERVAL_MINUTES
+    minute = (now.minute // interval) * interval
+    target = now.replace(minute=minute, second=0, microsecond=0) + dt.timedelta(minutes=interval)
     return target
 
 

@@ -39,7 +39,7 @@ def scan_once():
     chain = market_data.build_chain(config.EXCHANGE_ID)
     fetch = market_data.make_fetcher(chain)
     symbols = config.SYMBOLS
-    btc_m15 = None
+    btc_base = None
     btc_src = None
     signals = []
     scanned = 0
@@ -49,32 +49,32 @@ def scan_once():
         log.info("Memindai %s ...", symbol)
         try:
             if symbol == config.BTC_SYMBOL:
-                btc_raw, btc_src = fetch(symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                btc_m15 = market_data.closed_candles(btc_raw)
-                m15 = btc_m15
+                btc_raw, btc_src = fetch(symbol, config.TIMEFRAME_SCALP, config.BASE_CANDLE_COUNT)
+                btc_base = market_data.closed_candles(btc_raw)
+                base = btc_base
             else:
-                if btc_m15 is None and config.BTC_SYMBOL in symbols:
-                    btc_raw, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                    btc_m15 = market_data.closed_candles(btc_raw)
-                if btc_m15 is None:
-                    btc_raw, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                    btc_m15 = market_data.closed_candles(btc_raw)
-                m15, m15_src = fetch(symbol, config.TIMEFRAME_SCALP, config.M15_CANDLE_COUNT)
-                m15 = market_data.closed_candles(m15)
-            h1, h1_src = fetch(symbol, config.TIMEFRAME_HIGHER, config.H1_CANDLE_COUNT)
-            h1 = market_data.closed_candles(h1)
+                if btc_base is None and config.BTC_SYMBOL in symbols:
+                    btc_raw, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.BASE_CANDLE_COUNT)
+                    btc_base = market_data.closed_candles(btc_raw)
+                if btc_base is None:
+                    btc_raw, btc_src = fetch(config.BTC_SYMBOL, config.TIMEFRAME_SCALP, config.BASE_CANDLE_COUNT)
+                    btc_base = market_data.closed_candles(btc_raw)
+                base, base_src = fetch(symbol, config.TIMEFRAME_SCALP, config.BASE_CANDLE_COUNT)
+                base = market_data.closed_candles(base)
+            higher, higher_src = fetch(symbol, config.TIMEFRAME_HIGHER, config.HIGHER_CANDLE_COUNT)
+            higher = market_data.closed_candles(higher)
             scanned += 1
-            log.info("  Sumber data: %s", m15_src if symbol != config.BTC_SYMBOL else btc_src)
+            log.info("  Sumber data: %s", base_src if symbol != config.BTC_SYMBOL else btc_src)
         except Exception as exc:
             failed += 1
             log.error("Gagal mengambil data %s: %s", symbol, exc)
             continue
 
-        candle_close = m15["ts"].iloc[-1] + dt.timedelta(minutes=15)
+        candle_close = base["ts"].iloc[-1] + dt.timedelta(minutes=config.TIMEFRAME_SCALP_MINUTES)
         age_minutes = (now - candle_close).total_seconds() / 60.0
         fresh = age_minutes <= config.FRESH_CANDLE_MAX_AGE_MINUTES
 
-        result = filters.evaluate(symbol, m15, h1, btc_m15, is_altcoin=symbol != config.BTC_SYMBOL)
+        result = filters.evaluate(symbol, base, higher, btc_base, is_altcoin=symbol != config.BTC_SYMBOL)
         log_scan_result(symbol, result)
         if result["passed"] and not fresh:
             log.info("  Sinyal %s berbasis candle %s (umur %.1f menit) — basi untuk scalping, dilewati.", symbol, candle_close.strftime("%H:%M"), age_minutes)
@@ -107,7 +107,7 @@ def next_boundary(now):
 
 
 def run_loop():
-    log.info("Mode loop lokal: scan sekarang, lalu tiap kelipatan 15 menit.")
+    log.info("Mode loop lokal: scan sekarang, lalu tiap kelipatan %d menit.", config.SCAN_INTERVAL_MINUTES)
     while True:
         try:
             scan_once()
@@ -121,14 +121,14 @@ def run_loop():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Robot Trading BrandBisnis - Signal Bot M15 (Non-Execution)")
+    parser = argparse.ArgumentParser(        description=f"Robot Trading BrandBisnis - Signal Bot {config.TIMEFRAME_LABEL} (Non-Execution)")
     parser.add_argument("--dry-run", action="store_true", help="Hanya log ke console, tidak mengirim Telegram")
-    parser.add_argument("--loop", action="store_true", help="Jalankan terus tiap kelipatan 15 menit (simulasi lokal)")
+    parser.add_argument("--loop", action="store_true", help="Jalankan terus tiap kelipatan 5 menit (simulasi lokal)")
     parser.add_argument("--test-telegram", action="store_true", help="Kirim pesan tes untuk validasi kredensial")
     args = parser.parse_args()
 
     setup_logging()
-    log.info("=== %s | Signal Bot M15 | 5-Layer Filter ===", config.PRODUCT_NAME)
+    log.info("=== %s | Signal Bot %s | 5-Layer Filter ===", config.PRODUCT_NAME, config.TIMEFRAME_LABEL)
     log.info("Exchange: %s | Watchlist: %s", config.EXCHANGE_ID, ", ".join(config.SYMBOLS))
 
     if args.test_telegram:

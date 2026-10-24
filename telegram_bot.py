@@ -27,7 +27,7 @@ def build_alert_html(result, levels):
             dist = abs(price - d2["support"]) / d2["support"] * 100.0
             zone_line = (
                 f"Harga {fmt_price(price)} memantul {dist:.1f}% di atas support {fmt_price(d2['support'])} "
-                f"(swing low 20 candle M15) dan tetap di atas VWAP {fmt_price(d2['vwap'])} "
+                f"(swing low 20 candle {config.TIMEFRAME_LABEL}) dan tetap di atas VWAP {fmt_price(d2['vwap'])} "
                 f"— area beli berisiko rendah di zona kunci."
             )
             zone_short = f"Pantulan Support {fmt_price(d2['support'])}"
@@ -49,10 +49,10 @@ def build_alert_html(result, levels):
             )
             mom_short = "RSI kuat di atas 50"
         trend_line = (
-            f"M15 close di atas EMA{config.EMA_TREND_M15} dan H1 close di atas EMA{config.EMA_TREND_H1} — "
+            f"{config.TIMEFRAME_LABEL} close di atas EMA{config.EMA_TREND_BASE} dan {config.TIMEFRAME_HIGHER_LABEL} close di atas EMA{config.EMA_TREND_HIGHER} — "
             f"mengikuti tren institusi; melawan tren adalah penyebab utama scalping gagal."
         )
-        trend_short = f"M15 &gt; EMA{config.EMA_TREND_M15}, H1 &gt; EMA{config.EMA_TREND_H1}"
+        trend_short = f"{config.TIMEFRAME_LABEL} &gt; EMA{config.EMA_TREND_BASE}, {config.TIMEFRAME_HIGHER_LABEL} &gt; EMA{config.EMA_TREND_HIGHER}"
         vol_line = (
             f"Volume {d3['volume_ratio']:.1f}x rata-rata 20 candle — ada penyerapan/akumulasi "
             f"yang mendukung gerak naik, mengurangi risiko fakeout."
@@ -67,7 +67,7 @@ def build_alert_html(result, levels):
             dist = abs(d2["resistance"] - price) / d2["resistance"] * 100.0
             zone_line = (
                 f"Harga {fmt_price(price)} tertahan {dist:.1f}% di bawah resistance {fmt_price(d2['resistance'])} "
-                f"(swing high 20 candle M15) dan di bawah VWAP {fmt_price(d2['vwap'])} "
+                f"(swing high 20 candle {config.TIMEFRAME_LABEL}) dan di bawah VWAP {fmt_price(d2['vwap'])} "
                 f"— area jual berisiko rendah di zona kunci."
             )
             zone_short = f"Pantulan Resistance {fmt_price(d2['resistance'])}"
@@ -89,10 +89,10 @@ def build_alert_html(result, levels):
             )
             mom_short = "RSI lemah di bawah 50"
         trend_line = (
-            f"M15 close di bawah EMA{config.EMA_TREND_M15} dan H1 close di bawah EMA{config.EMA_TREND_H1} — "
+            f"{config.TIMEFRAME_LABEL} close di bawah EMA{config.EMA_TREND_BASE} dan {config.TIMEFRAME_HIGHER_LABEL} close di bawah EMA{config.EMA_TREND_HIGHER} — "
             f"mengikuti tren turun institusi; melawan tren adalah penyebab utama short gagal."
         )
-        trend_short = f"M15 &lt; EMA{config.EMA_TREND_M15}, H1 &lt; EMA{config.EMA_TREND_H1}"
+        trend_short = f"{config.TIMEFRAME_LABEL} &lt; EMA{config.EMA_TREND_BASE}, {config.TIMEFRAME_HIGHER_LABEL} &lt; EMA{config.EMA_TREND_HIGHER}"
         vol_line = (
             f"Volume {d3['volume_ratio']:.1f}x rata-rata 20 candle — ada tekanan jual yang tervalidasi, "
             f"bukan penurunan sepi volume."
@@ -120,14 +120,14 @@ def build_alert_html(result, levels):
         d5 = result["layers"][4]["detail"]
         if is_long:
             explanation.append(
-                f"&#8226; BTC: {fmt_price(d5['btc_close'])} &gt; EMA{config.EMA_TREND_M15} "
+                f"&#8226; BTC: {fmt_price(d5['btc_close'])} &gt; EMA{config.EMA_TREND_BASE} "
                 f"({fmt_price(d5['btc_ema200'])}) dan tidak breaking support — "
                 f"'penguasa pasar' searah, pergerakan altcoin lebih aman."
             )
         else:
             explanation.append(
                 f"&#8226; BTC: {fmt_price(d5['btc_close'])} tidak breakout resistance "
-                f"({fmt_price(d5['btc_resistance'])}) dan di bawah EMA{config.EMA_TREND_M15} "
+                f"({fmt_price(d5['btc_resistance'])}) dan di bawah EMA{config.EMA_TREND_BASE} "
                 f"{fmt_price(d5['btc_ema200'])} +{config.BTC_FAR_BELOW_EMA_PCT:g}% — "
                 f"'penguasa pasar' tidak melawan posisi short."
             )
@@ -135,20 +135,20 @@ def build_alert_html(result, levels):
 
     if is_long:
         trend_bullet = (
-            f"- Tren: Multi-TF Bullish (M15 &gt; EMA{config.EMA_TREND_M15}, H1 &gt; EMA{config.EMA_TREND_H1})."
+            f"- Tren: Multi-TF Bullish ({config.TIMEFRAME_LABEL} &gt; EMA{config.EMA_TREND_BASE}, {config.TIMEFRAME_HIGHER_LABEL} &gt; EMA{config.EMA_TREND_HIGHER})."
         )
     else:
         trend_bullet = (
-            f"- Tren: Multi-TF Bearish (M15 &lt; EMA{config.EMA_TREND_M15}, H1 &lt; EMA{config.EMA_TREND_H1})."
+            f"- Tren: Multi-TF Bearish ({config.TIMEFRAME_LABEL} &lt; EMA{config.EMA_TREND_BASE}, {config.TIMEFRAME_HIGHER_LABEL} &lt; EMA{config.EMA_TREND_HIGHER})."
         )
     btc_bullet_long = (
         f"- BTC: Sejalan (BTC/USDT {fmt_price(d5['btc_close']) if result['is_altcoin'] else '-'} "
-        f"&gt; EMA{config.EMA_TREND_M15})."
+        f"&gt; EMA{config.EMA_TREND_BASE})."
     ) if is_long else None
 
     lines = [
         "&#128680; <b>BRANDBISNIS SCALP ALERT</b> &#128680;",
-        f"&#9200; <i>Timeframe:</i> 15 Menit (M15) | <i>Mode:</i> Futures Standard",
+        f"&#9200; <i>Timeframe:</i> 5 Menit ({config.TIMEFRAME_LABEL}) | <i>Mode:</i> Futures Standard",
         "",
         f"&#128200; <b>PASANGAN</b> : {result['symbol']}",
         pos_line,
@@ -190,7 +190,7 @@ def send_message(text):
 def send_test_message():
     body = (
         "&#128225; <b>BRANDBISNIS SIGNAL BOT</b>\n"
-        "Bot aktif. Mesin 5-Layer Filter siap memindai pasar setiap 15 menit (M15).\n"
+        f"Bot aktif. Mesin 5-Layer Filter siap memindai pasar setiap 5 menit ({config.TIMEFRAME_LABEL}).\n"
         "<i>Non-Execution: sinyal Entry, TP, dan SL saja, tanpa menyentuh dana.</i>"
     )
     return send_message(body)

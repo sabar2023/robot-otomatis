@@ -1,4 +1,4 @@
-name: BrandBisnis Signal Bot (M15 Cron)
+name: BrandBisnis Signal Bot (M5 Cron)
 
 on:
   schedule:
@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run 5-layer M15 signal scan
+      - name: Run 5-layer M5 signal scan
         env:
           EXCHANGE_ID: binance
           SYMBOLS: BTC/USDT,ETH/USDT,SOL/USDT,BNB/USDT

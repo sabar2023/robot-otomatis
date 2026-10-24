@@ -2,30 +2,30 @@ import config
 import indicators as ind
 
 
-def _side_metrics(m15, h1):
-    close = float(m15["close"].iloc[-1])
-    prev_close = float(m15["close"].iloc[-2])
-    ema200_m15 = float(ind.ema(m15["close"], config.EMA_TREND_M15).iloc[-1])
-    close_h1 = float(h1["close"].iloc[-1])
-    ema50_h1 = float(ind.ema(h1["close"], config.EMA_TREND_H1).iloc[-1])
-    support = float(ind.swing_support(m15, config.SWING_LOOKBACK))
-    resistance = float(ind.swing_resistance(m15, config.SWING_LOOKBACK))
-    support_prev = float(m15["low"].iloc[-config.SWING_LOOKBACK - 1:-1].min())
-    resistance_prev = float(ind.swing_resistance_prev(m15, config.SWING_LOOKBACK))
-    vwap = float(ind.session_vwap(m15).iloc[-1])
-    rsi_series = ind.rsi(m15["close"], config.RSI_PERIOD)
+def _side_metrics(base, higher):
+    close = float(base["close"].iloc[-1])
+    prev_close = float(base["close"].iloc[-2])
+    ema200_base = float(ind.ema(base["close"], config.EMA_TREND_BASE).iloc[-1])
+    close_high = float(higher["close"].iloc[-1])
+    ema50_high = float(ind.ema(higher["close"], config.EMA_TREND_HIGHER).iloc[-1])
+    support = float(ind.swing_support(base, config.SWING_LOOKBACK))
+    resistance = float(ind.swing_resistance(base, config.SWING_LOOKBACK))
+    support_prev = float(base["low"].iloc[-config.SWING_LOOKBACK - 1:-1].min())
+    resistance_prev = float(ind.swing_resistance_prev(base, config.SWING_LOOKBACK))
+    vwap = float(ind.session_vwap(base).iloc[-1])
+    rsi_series = ind.rsi(base["close"], config.RSI_PERIOD)
     rsi_now = float(rsi_series.iloc[-1])
     rsi_prev = float(rsi_series.iloc[-2])
-    volume = m15["volume"]
+    volume = base["volume"]
     vol_now = float(volume.iloc[-1])
     vol_sma = float(volume.rolling(config.VOLUME_SMA_PERIOD).mean().iloc[-2])
-    adx_now = float(ind.adx(m15, config.ADX_PERIOD).iloc[-1])
+    adx_now = float(ind.adx(base, config.ADX_PERIOD).iloc[-1])
     return {
         "close": close,
         "prev_close": prev_close,
-        "ema200_m15": ema200_m15,
-        "close_h1": close_h1,
-        "ema50_h1": ema50_h1,
+        "ema200_base": ema200_base,
+        "close_high": close_high,
+        "ema50_high": ema50_high,
         "support": support,
         "resistance": resistance,
         "support_prev": support_prev,
@@ -39,12 +39,12 @@ def _side_metrics(m15, h1):
     }
 
 
-def _l5_long(btc_m15, is_altcoin):
+def _l5_long(btc_base, is_altcoin):
     if not is_altcoin:
         return True, {"note": "BTC adalah referensi, layer dilewati"}
-    close = float(btc_m15["close"].iloc[-1])
-    support = float(ind.swing_support(btc_m15, config.SWING_LOOKBACK))
-    ema200 = float(ind.ema(btc_m15["close"], config.EMA_TREND_M15).iloc[-1])
+    close = float(btc_base["close"].iloc[-1])
+    support = float(ind.swing_support(btc_base, config.SWING_LOOKBACK))
+    ema200 = float(ind.ema(btc_base["close"], config.EMA_TREND_BASE).iloc[-1])
     support_break = close < support
     far_below_ema200 = close < ema200 * (1.0 - config.BTC_FAR_BELOW_EMA_PCT / 100.0)
     passed = not (support_break or far_below_ema200)
@@ -57,12 +57,12 @@ def _l5_long(btc_m15, is_altcoin):
     }
 
 
-def _l5_short(btc_m15, is_altcoin):
+def _l5_short(btc_base, is_altcoin):
     if not is_altcoin:
         return True, {"note": "BTC adalah referensi, layer dilewati"}
-    close = float(btc_m15["close"].iloc[-1])
-    resistance = float(ind.swing_resistance(btc_m15, config.SWING_LOOKBACK))
-    ema200 = float(ind.ema(btc_m15["close"], config.EMA_TREND_M15).iloc[-1])
+    close = float(btc_base["close"].iloc[-1])
+    resistance = float(ind.swing_resistance(btc_base, config.SWING_LOOKBACK))
+    ema200 = float(ind.ema(btc_base["close"], config.EMA_TREND_BASE).iloc[-1])
     resistance_break = close > resistance
     far_above_ema200 = close > ema200 * (1.0 + config.BTC_FAR_BELOW_EMA_PCT / 100.0)
     passed = not (resistance_break or far_above_ema200)
@@ -75,14 +75,14 @@ def _l5_short(btc_m15, is_altcoin):
     }
 
 
-def _long_layers(m, btc_m15, is_altcoin):
+def _long_layers(m, btc_base, is_altcoin):
     tol = config.SUPPORT_TOLERANCE_PCT / 100.0
-    l1 = m["close"] > m["ema200_m15"] and m["close_h1"] > m["ema50_h1"]
+    l1 = m["close"] > m["ema200_base"] and m["close_high"] > m["ema50_high"]
     l1_detail = {
-        "close_m15": m["close"],
-        "ema200_m15": m["ema200_m15"],
-        "close_h1": m["close_h1"],
-        "ema50_h1": m["ema50_h1"],
+        "close_base": m["close"],
+        "ema200_base": m["ema200_base"],
+        "close_high": m["close_high"],
+        "ema50_high": m["ema50_high"],
     }
 
     near_support = m["support"] * (1.0 - tol) <= m["close"] <= m["support"] * (1.0 + tol)
@@ -113,7 +113,7 @@ def _long_layers(m, btc_m15, is_altcoin):
     }
 
     l4 = m["adx"] > config.ADX_MIN
-    l5, l5_detail = _l5_long(btc_m15, is_altcoin)
+    l5, l5_detail = _l5_long(btc_base, is_altcoin)
 
     return [
         {"name": "L1 Tren Multi-TF", "passed": l1, "detail": l1_detail},
@@ -124,14 +124,14 @@ def _long_layers(m, btc_m15, is_altcoin):
     ]
 
 
-def _short_layers(m, btc_m15, is_altcoin):
+def _short_layers(m, btc_base, is_altcoin):
     tol = config.SUPPORT_TOLERANCE_PCT / 100.0
-    l1 = m["close"] < m["ema200_m15"] and m["close_h1"] < m["ema50_h1"]
+    l1 = m["close"] < m["ema200_base"] and m["close_high"] < m["ema50_high"]
     l1_detail = {
-        "close_m15": m["close"],
-        "ema200_m15": m["ema200_m15"],
-        "close_h1": m["close_h1"],
-        "ema50_h1": m["ema50_h1"],
+        "close_base": m["close"],
+        "ema200_base": m["ema200_base"],
+        "close_high": m["close_high"],
+        "ema50_high": m["ema50_high"],
     }
 
     near_resistance = m["resistance"] * (1.0 - tol) <= m["close"] <= m["resistance"] * (1.0 + tol)
@@ -162,7 +162,7 @@ def _short_layers(m, btc_m15, is_altcoin):
     }
 
     l4 = m["adx"] > config.ADX_MIN
-    l5, l5_detail = _l5_short(btc_m15, is_altcoin)
+    l5, l5_detail = _l5_short(btc_base, is_altcoin)
 
     return [
         {"name": "L1 Tren Multi-TF", "passed": l1, "detail": l1_detail},
@@ -173,10 +173,10 @@ def _short_layers(m, btc_m15, is_altcoin):
     ]
 
 
-def evaluate(symbol, m15, h1, btc_m15, is_altcoin):
-    m = _side_metrics(m15, h1)
-    long_layers = _long_layers(m, btc_m15, is_altcoin)
-    short_layers = _short_layers(m, btc_m15, is_altcoin)
+def evaluate(symbol, base, higher, btc_base, is_altcoin):
+    m = _side_metrics(base, higher)
+    long_layers = _long_layers(m, btc_base, is_altcoin)
+    short_layers = _short_layers(m, btc_base, is_altcoin)
     long_pass = all(layer["passed"] for layer in long_layers)
     short_pass = all(layer["passed"] for layer in short_layers)
 
@@ -186,16 +186,16 @@ def evaluate(symbol, m15, h1, btc_m15, is_altcoin):
         direction, layers = "SHORT", short_layers
     else:
         direction = None
-        layers = long_layers if m["close"] > m["ema200_m15"] else short_layers
+        layers = long_layers if m["close"] > m["ema200_base"] else short_layers
 
     failed = [layer["name"] for layer in layers if not layer["passed"]]
-    atr_value = float(ind.atr(m15, config.ATR_PERIOD).iloc[-1])
+    atr_value = float(ind.atr(base, config.ATR_PERIOD).iloc[-1])
     return {
         "symbol": symbol,
         "is_altcoin": is_altcoin,
         "price": m["close"],
         "atr": atr_value,
-        "timeframe": "M15",
+        "timeframe": config.TIMEFRAME_LABEL,
         "direction": direction,
         "layers": layers,
         "passed": direction is not None,

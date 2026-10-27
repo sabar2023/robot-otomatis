@@ -111,18 +111,27 @@ python3 main.py --loop
 
 ## Deployment (sudah berjalan)
 
+- **Pemicu utama:** Cloudflare Worker `bot-cron`
+  (`https://bot-cron.sabar2023.workers.dev`, cron `*/5 * * * *`) memanggil
+  `workflow_dispatch` ke kedua repo. `schedule` GitHub sengaja **dimatikan**
+  (terbukti di-throttle 4-5 jam) dan agar tidak ada run dobel.
+  Manual: `https://bot-cron.sabar2023.workers.dev/run?key=<TRIGGER_KEY>`.
 - **Repo baru (sistem VST):** `sabar2023/robot-otomatis`, branch `main`
-  (push = langsung live). Cron aktif: `cron-vst.yml`. `cron.yml` (signal bot)
-  hanya manual di repo ini karena signal bot tetap jalan di repo lama.
-- **Repo lama (signal bot):** `sabar2023/robot-trading`, branch `main` —
-  tidak diubah, cron `cron.yml` tetap aktif. `cron-vst.yml` di sana dimatikan
-  agar VST tidak jalan dua kali.
+  (push = langsung live). Workflow `cron-vst.yml` (dispatch-only).
+  `cron.yml` (signal bot) hanya manual di repo ini karena signal bot tetap
+  jalan di repo lama.
+- **Repo lama (signal bot):** `sabar2023/robot-trading`, branch `main`,
+  `cron.yml` (dispatch-only). `cron-vst.yml` di sana tidak dipakai (VST hanya
+  di repo baru).
 - Secrets repo baru: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
   `BINGX_API_KEY`, `BINGX_SECRET_KEY`, `SUPABASE_KEY`
   (+ variable `VST_LIVE` bila ingin live).
 - Run manual: tombol *Run workflow* di tab Actions, atau
   `gh workflow run cron-vst.yml -R sabar2023/robot-otomatis`.
-- Biaya: repo publik → menit Actions gratis tanpa limit.
+- Biaya: repo publik → menit Actions gratis tanpa limit; Worker cron gratis
+  (288 request/hari dari 100k limit).
+- Jika PAT GitHub di Worker kedaluwarsa, dispatch berhenti diam-diam: perbarui
+  via `wrangler secret put GITHUB_PAT` (log: Workers & Pages → bot-cron → Logs).
 
 ## Catatan Penting (Pitfall)
 

@@ -29,12 +29,16 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 
 ## Pembagian Repo
 
-- `sabar2023/robot-trading` (lama): signal bot 4 koin, cron `cron.yml` tetap
-  aktif di sana. Repo ini TIDAK boleh dipindah/dimatikan (`cron-vst.yml` di sana
-  sengaja dimatikan agar VST tidak dobel).
-- `sabar2023/robot-otomatis` (baru): sub-sistem VST (folder `vst/`), cron
-  `cron-vst.yml` aktif. `cron.yml` (signal bot) di repo baru hanya manual —
-  signal bot produksi tetap di repo lama.
+- `sabar2023/robot-trading` (lama): signal bot 4 koin, workflow `cron.yml`
+  (dispatch-only) di sana. Repo ini TIDAK boleh dipindah/dimatikan
+  (`cron-vst.yml` di sana tidak dipakai agar VST tidak dobel).
+- `sabar2023/robot-otomatis` (baru): sub-sistem VST (folder `vst/`),
+  `cron-vst.yml` (dispatch-only). `cron.yml` (signal bot) di repo baru hanya
+  manual — signal bot produksi tetap di repo lama.
+- Pemicu: Cloudflare Worker `bot-cron` (cron `*/5`, `wrangler` project di luar
+  repo) dispatch kedua workflow tiap 5 menit. `schedule` GitHub di kedua repo
+  sengaja dimatikan (throttle 4-5 jam + anti dobel). Secret Worker:
+  `GITHUB_PAT` (fine-grained, Actions: write) dan `TRIGGER_KEY`.
 - Database: Supabase project "robot otomatis" (`jklbczruvbxscpwxxfud`), tabel
   `ro_scans`, `ro_executions`, `ro_config` (lihat `vst/database.py`).
 

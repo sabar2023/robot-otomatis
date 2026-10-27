@@ -21,8 +21,34 @@ async function dispatch(env, { repo, workflow }) {
   return { repo, workflow, status: resp.status, ok: resp.ok, body };
 }
 
+async function notify(env, text) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: env.TELEGRAM_CHAT_ID,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+  } catch (err) {
+    console.log("notify failed:", String(err));
+  }
+}
+
 async function runAll(env) {
-  return Promise.all(TARGETS.map((t) => dispatch(env, t)));
+  const results = await Promise.all(TARGETS.map((t) => dispatch(env, t)));
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length) {
+    const detail = failed
+      .map((r) => `${r.repo}/${r.workflow}: HTTP ${r.status} ${r.body}`)
+      .join("\n");
+    await notify(env, `&#10060; <b>bot-cron: dispatch GitHub gagal</b>\n<code>${detail}</code>\nPeriksa secret <code>GITHUB_PAT</code> di Worker.`);
+  }
+  return results;
 }
 
 export default {

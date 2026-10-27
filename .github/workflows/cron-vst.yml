@@ -3,7 +3,12 @@ name: BrandBisnis VST Bot (M5 Cron)
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test_telegram:
+        description: "Kirim pesan tes Telegram saja"
+        type: boolean
+        default: false
 
 jobs:
   vst-scan:
@@ -28,4 +33,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://jklbczruvbxscpwxxfud.supabase.co' }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python3 vst/main.py
+          TEST_TELEGRAM: ${{ inputs.test_telegram }}
+        run: |
+          if [ "$TEST_TELEGRAM" = "true" ]; then
+            python3 vst/main.py --test-telegram
+          else
+            python3 vst/main.py
+          fi

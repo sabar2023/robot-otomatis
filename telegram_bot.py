@@ -58,8 +58,8 @@ def build_alert_html(result, levels):
             f"yang mendukung gerak naik, mengurangi risiko fakeout."
         )
         risk_line = (
-            f"SL {config.ATR_SL_MULT:g}x ATR ({fmt_price(result['atr'])}) di bawah entry mengikuti volatilitas riil; "
-            f"TP {config.ATR_TP_MULT:g}x ATR menghasilkan RR 1:2 — rugi kecil, profit target besar."
+            f"SL {config.SL_PCT:g}% di bawah entry dan TP {config.TP_PCT:g}% di atas entry "
+            f"(RR 1:{config.TP_PCT / config.SL_PCT:g}) — rugi terukur, profit target realistis."
         )
     else:
         pos_line = "&#128308; <b>POSISI</b>   : SHORT (SELL)"
@@ -98,15 +98,15 @@ def build_alert_html(result, levels):
             f"bukan penurunan sepi volume."
         )
         risk_line = (
-            f"SL {config.ATR_SL_MULT:g}x ATR ({fmt_price(result['atr'])}) di atas entry mengikuti volatilitas riil; "
-            f"TP {config.ATR_TP_MULT:g}x ATR di bawah menghasilkan RR 1:2."
+            f"SL {config.SL_PCT:g}% di atas entry dan TP {config.TP_PCT:g}% di bawah entry "
+            f"(RR 1:{config.TP_PCT / config.SL_PCT:g}) — rugi terukur, profit target realistis."
         )
 
     vol_and_mom_short = f"{mom_short}, Volume {d3['volume_ratio']:.1f}x SMA{config.VOLUME_SMA_PERIOD}"
 
     leverage_line = (
         f"&#9881; <b>LEVERAGE</b>   : {levels['leverage']}x "
-        f"(jarak SL {levels['sl_distance_pct']:.2f}%, risiko max ±{config.RISK_PER_TRADE_PCT:g}% margin saat SL kena)"
+        f"(jarak SL {levels['sl_distance_pct']:.2f}%, risiko max ±{levels['sl_distance_pct'] * levels['leverage']:.1f}% margin saat SL kena)"
     )
 
     explanation = [
@@ -155,8 +155,8 @@ def build_alert_html(result, levels):
         "",
         f"&#127919; <b>ENTRY</b>    : {fmt_price(levels['entry_low'])} - {fmt_price(levels['entry_high'])} "
         f"({'di atas harga sinyal' if is_long else 'di bawah harga sinyal'})",
-        f"&#128721; <b>STOP LOSS</b>: {fmt_price(levels['stop_loss'])} ({config.ATR_SL_MULT:g}x ATR)",
-        f"&#9989; <b>TAKE PROFIT</b>: {fmt_price(levels['take_profit'])} (RR 1:2)",
+        f"&#128721; <b>STOP LOSS</b>: {fmt_price(levels['stop_loss'])} ({levels['sl_distance_pct']:.2f}% dari entry)",
+        f"&#9989; <b>TAKE PROFIT</b>: {fmt_price(levels['take_profit'])} ({levels['tp_distance_pct']:.2f}% dari entry | RR 1:{levels['rr']:g})",
         leverage_line,
         "",
         "&#128202; <b>Analisis AI Teknikal:</b>",

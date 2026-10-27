@@ -41,8 +41,8 @@ ADX_PERIOD = 14
 ADX_MIN = 20
 
 ATR_PERIOD = 14
-ATR_SL_MULT = 1.5
-ATR_TP_MULT = 3.0
+SL_PCT = float(os.getenv("SL_PCT", "2.5"))
+TP_PCT = float(os.getenv("TP_PCT", "7.5"))
 
 POSITION_SIZE_USDT = float(os.getenv("VST_POSITION_SIZE_USDT", "100"))
 LEVERAGE = int(os.getenv("VST_LEVERAGE", "10"))

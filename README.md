@@ -25,10 +25,11 @@ Setiap 5 menit (cron `*/5 * * * *`), `main.py` untuk tiap koin:
    - **L4 ADX:** ADX(14) > 20 (anti-sideways).
    - **L5 Bitcoin Rule (altcoin saja):** BTC tidak boleh breaking support (LONG) / resistant breakout atau jauh > EMA200 (SHORT).
 3. Freshness guard: sinyal hanya dikirim jika berbasis candle M5 yang baru close ≤ 9.5 menit (mencegah duplikat/sinyal basi).
-4. Jika lolos: hitung level berbasis ATR(14):
-   - LONG: entry = harga s.d. +0.1%, SL = 1.5x ATR di bawah, TP = 3.0x ATR di atas (RR 1:2).
-   - SHORT: entry = harga −0.1% s.d. harga, SL = 1.5x ATR di atas, TP = 3.0x ATR di bawah.
-   - **Leverage** = floor(2.0% / jarak-SL-%), dibatasi 2x–10x → risiko margin tetap ±2% saat SL kena.
+4. Jika lolos: hitung level persentase dari entry:
+   - LONG: entry = harga s.d. +0.1%, SL = 2.5% di bawah, TP = 7.5% di atas (RR 1:3).
+   - SHORT: entry = harga −0.1% s.d. harga, SL = 2.5% di atas, TP = 7.5% di bawah.
+   - SL/TP diatur `SL_PCT`/`TP_PCT` (default 2.5/7.5 → rentang SL 2-3%, TP 5-10%).
+   - **Leverage** = floor(2.0% / jarak-SL-%), dibatasi 2x-10x.
 5. Kirim pesan HTML ke Telegram (template di `telegram_bot.py`: posisi, entry, SL, TP, leverage, analisis + "Penjelasan Sinyal").
 6. Jika SEMUA bursa gagal memberi data → run gagal (exit 1), terlihat merah di Actions.
 
@@ -39,7 +40,7 @@ Setiap 5 menit (cron `*/5 * * * *`), `main.py` untuk tiap koin:
 | `main.py` | Orkestrasi: scan, freshness, kirim Telegram; CLI `--dry-run`, `--loop`, `--test-telegram` |
 | `config.py` | Semua konstanta + pembacaan `.env` |
 | `filters.py` | 5 layer filter dua arah (LONG/SHORT) |
-| `risk.py` | Level ATR entry/SL/TP + kalkulasi leverage |
+| `risk.py` | Level entry/SL/TP (persentase) + kalkulasi leverage |
 | `indicators.py` | EMA/SMA/RSI/ATR/ADX/VWAP sesi/swing — pandas murni, tanpa pandas_ta |
 | `market_data.py` | Chain bursa ccxt + fetcher failover + filter candle close |
 | `telegram_bot.py` | Format pesan HTML + kirim via Bot API |
@@ -63,8 +64,8 @@ berdampingan.
 - **Strategi (5 layer, dua arah, semua wajib TRUE):** L1 Close vs EMA-200 (M5),
   L2 dekat swing low/high 20 candle (±0.2%), L3 RSI(14) cross dari <30 (LONG)
   / >70 (SHORT), L4 Volume > SMA20, L5 ADX(14) > 20.
-- **Risiko:** SL = 1.5x ATR(14), TP = 3.0x ATR(14), RR 1:2, ukuran 100 USDT,
-  leverage 10x.
+- **Risiko:** SL = 2.5%, TP = 7.5% dari entry (RR 1:3; rentang SL 2-3%, TP
+  5-10% via `SL_PCT`/`TP_PCT`), ukuran 100 USDT, leverage 10x.
 - **Pengaman:** freshness guard (candle tutup ≤ 9.5 menit) + di mode live
   otomatis skip jika sudah ada posisi terbuka di simbul tersebut.
 - **Sumber data:** bingx dengan failover multi-bursa (hanya untuk data;

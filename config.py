@@ -50,8 +50,8 @@ ADX_MIN = 20
 BTC_FAR_BELOW_EMA_PCT = 2.0
 
 ATR_PERIOD = 14
-ATR_SL_MULT = 1.5
-ATR_TP_MULT = 3.0
+SL_PCT = float(os.getenv("SL_PCT", "2.5"))
+TP_PCT = float(os.getenv("TP_PCT", "7.5"))
 ENTRY_SPREAD_PCT = 0.1
 RISK_PER_TRADE_PCT = 2.0
 MAX_LEVERAGE = 10

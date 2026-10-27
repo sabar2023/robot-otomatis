@@ -65,8 +65,10 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   `support_break` (artinya: BTC breaking resistance) dan `far_below_ema200`
   (artinya: BTC jauh di atas EMA200) — sengaja reuse untuk berbagi kode
   `telegram_bot.build_alert_html`.
-- `risk.compute_levels(direction, entry_price, atr_value)` → entry zone, SL, TP,
-  `sl_distance_pct`, `leverage` (floor(2%/sl_dist%), clamp 2–10x), `rr`.
+- `risk.compute_levels(direction, entry_price, atr_value)` → entry zone, SL, TP
+  (berbasis `SL_PCT`/`TP_PCT` dari config: default SL 2.5%, TP 7.5%),
+  `sl_distance_pct`, `tp_distance_pct`, `leverage` (floor(2%/sl_dist%), clamp
+  2–10x), `rr`.
 - `market_data.make_fetcher(chain)` mengembalikan fetcher yang "nempel" ke bursa
   terakhir yang sukses dalam satu run (failover per run).
 - Freshness: `main.py menolak sinyal bila candle basis > 9.5 menit` (window 2 candle

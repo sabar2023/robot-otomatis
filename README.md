@@ -114,8 +114,10 @@ python3 main.py --loop
 
 - **Pemicu utama:** Cloudflare Worker `bot-cron`
   (`https://bot-cron.sabar2023.workers.dev`, cron `*/5 * * * *`) memanggil
-  `workflow_dispatch` ke kedua repo. `schedule` GitHub sengaja **dimatikan**
-  (terbukti di-throttle 4-5 jam) dan agar tidak ada run dobel.
+  `workflow_dispatch` ke `cron-vst.yml` (robot-otomatis). Signal bot repo lama
+  **dinonaktifkan** (tidak dipicu; manual via tombol Actions bila perlu).
+  `schedule` GitHub sengaja **dimatikan** (terbukti di-throttle 4-5 jam) dan
+  agar tidak ada run dobel. Gagal dispatch → alert otomatis ke Telegram.
   Manual: `https://bot-cron.sabar2023.workers.dev/run?key=<TRIGGER_KEY>`.
 - **Repo baru (sistem VST):** `sabar2023/robot-otomatis`, branch `main`
   (push = langsung live). Workflow `cron-vst.yml` (dispatch-only).

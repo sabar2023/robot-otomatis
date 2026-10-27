@@ -30,15 +30,17 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 ## Pembagian Repo
 
 - `sabar2023/robot-trading` (lama): signal bot 4 koin, workflow `cron.yml`
-  (dispatch-only) di sana. Repo ini TIDAK boleh dipindah/dimatikan
-  (`cron-vst.yml` di sana tidak dipakai agar VST tidak dobel).
+  (dispatch-only). Sinyal lama **dimatikan** (tidak dipicu Worker); repo tetap
+  utuh, bisa dijalankan manual bila diperlukan.
 - `sabar2023/robot-otomatis` (baru): sub-sistem VST (folder `vst/`),
   `cron-vst.yml` (dispatch-only). `cron.yml` (signal bot) di repo baru hanya
-  manual — signal bot produksi tetap di repo lama.
+  manual.
 - Pemicu: Cloudflare Worker `bot-cron` (cron `*/5`, sumber di
-  `cloudflare/bot-cron/`) dispatch kedua workflow tiap 5 menit. `schedule` GitHub di kedua repo
-  sengaja dimatikan (throttle 4-5 jam + anti dobel). Secret Worker:
-  `GITHUB_PAT` (fine-grained, Actions: write) dan `TRIGGER_KEY`.
+  `cloudflare/bot-cron/`) **hanya** dispatch `cron-vst.yml` (robot-otomatis)
+  tiap 5 menit. `schedule` GitHub di kedua repo sengaja dimatikan
+  (throttle 4-5 jam + anti dobel). Gagal dispatch → alert Telegram otomatis.
+  Secret Worker: `GITHUB_PAT` (fine-grained, Actions: write), `TRIGGER_KEY`,
+  `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 - Database: Supabase project "robot otomatis" (`jklbczruvbxscpwxxfud`), tabel
   `ro_scans`, `ro_executions`, `ro_config` (lihat `vst/database.py`).
 

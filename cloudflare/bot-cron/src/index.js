@@ -1,5 +1,4 @@
 const TARGETS = [
-  { repo: "sabar2023/robot-trading", workflow: "cron.yml" },
   { repo: "sabar2023/robot-otomatis", workflow: "cron-vst.yml" },
 ];
 

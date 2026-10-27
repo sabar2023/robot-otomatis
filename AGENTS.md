@@ -9,13 +9,17 @@ selalu verifikasi sebelum push.
 
 ```bash
 # verifikasi sintaks semua modul
-python3 -m py_compile config.py main.py filters.py risk.py telegram_bot.py market_data.py indicators.py
+python3 -m py_compile config.py main.py filters.py risk.py telegram_bot.py market_data.py indicators.py vst/config.py vst/indicators.py vst/market_data.py vst/filters.py vst/risk.py vst/executor.py vst/telegram_bot.py vst/main.py
 
 # scan sekali dengan data live, tanpa kirim Telegram
 python3 main.py --dry-run
 
+# scan sekali sub-sistem VST (dry-run, tanpa order)
+python3 vst/main.py
+
 # kirim pesan tes ke grupTelegram (butuh .env terisi)
 python3 main.py --test-telegram
+python3 vst/main.py --test-telegram
 
 # push lalu uji di produksi (repo: sabar2023/robot-trading)
 git add -A && git commit -m "..." && git push
@@ -52,11 +56,24 @@ gh run view <run-id> -R sabar2023/robot-trading --log
   terakhir yang sukses dalam satu run (failover per run).
 - Freshness: `main.py menolak sinyal bila candle basis > 9.5 menit` (window 2 candle
   M5; scan cadence 5 menit). Ini juga mekanisme anti-duplikat, tidak ada state store.
+- Sub-sistem VST (folder `vst/`, PRD di `docs/PRD-Robot-Trading-M5-VST.md`):
+  bot **eksekusi** demo BingX, terpisah dari signal bot di atas.
+  `vst/filters.evaluate(symbol, base)` hanya butuh 1 dataframe M5 (tanpa higher-TF,
+  tanpa BTC rule). Arah LONG/SHORT dievaluasi simultan; menang = 5/5 layer.
+  `vst/executor.execute(levels, live, data_source_id)` → dry-run memakai bursa
+  publik pertama yang sukses `load_markets()` (urutan: sumber data, bingx, chain);
+  live = `ccxt.bingx` + `set_sandbox_mode(True)` (host `open-api-vst.bingx.com`),
+  market order dengan `params={"stopLoss": {...}, "takeProfit": {...}}` +
+  `marginCoin: VST`. Live skip entry jika `fetch_positions` menemukan posisi
+  terbuka. Mode live hanya aktif bila `VST_LIVE=1` **dan** API key diisi
+  (key dibuat di menu Demo Trading BingX, bukan API key riil).
 
 ## Pitfall Lingkungan (Jangan Diulang)
 
 - **Binance & Bybit = HTTP 451 dari IP GitHub Actions runner.** Lokal (jaringan dev)
-  binance sehat. Jangan kaget kalau log produksi "Sumber data: kraken".
+  binance sehat. Jangan kaget kalau log produksi "Sumber data: kraken". BingX
+  **belum tentu** juga kena 451, jadi `vst/market_data.py` tetap pakai chain
+  failover multi-bursa untuk data. Eksekusi live VST tetap harus ke host BingX.
 - **pandas 3.1:** `Series.replace(0.0, pd.NA)` → dtype object → `No numeric types to
   aggregate` di `.mean()`/`rolling`. Selalu `float("nan")`.
 - okx ter-exclude dari chain karena bug local di versi ccxt yang terpasang; jangan
@@ -71,9 +88,10 @@ gh run view <run-id> -R sabar2023/robot-trading --log
 
 ## Cek Verifikasi Standar Sebelum Menutup Tugas
 
-1. `python3 -m py_compile` semua modul.
+1. `python3 -m py_compile` semua modul (root + `vst/`).
 2. `python3 main.py --dry-run` → semua koin ter-evaluasi (STANDBY/SINYAL wajar).
-3. Setelah push: `gh workflow run cron.yml`, tunggu completion, log run terakhir
-   menunjukkan "Sumber data: <bursa>" + baris per-koin tanpa error.
-4. Jika mengubah format pesan: kirim 1 contoh ke grup dengan label CONTOH/TEST
+3. `python3 vst/main.py --dry-run` → BTC ter-evaluasi (STANDBY/SINYAL wajar), tidak ada order.
+4. Setelah push: `gh workflow run cron.yml`, tunggu completion, log run terakhir
+   menunjukkan "Sumber data: <bursa>" + baris per-koin tanpa error (cron VST terpisah: `cron-vst.yml`).
+5. Jika mengubah format pesan: kirim 1 contoh ke grup dengan label CONTOH/TEST
    (pola: buat dataframe sintetis lolos filter → `build_alert_html` → `send_message`).

@@ -48,6 +48,43 @@ Setiap 5 menit (cron `*/5 * * * *`), `main.py` untuk tiap koin:
 | `.env.example` | Template env lokal (nilai riil di `.env` yang gitignored) |
 | `archive/legacy_v1/` | Sistem V1 (FastAPI dashboard + Vite + Cloudflare) sebelum V2 — arsip, bukan dijalankan |
 
+## Sub-sistem VST (Eksekusi Demo BingX) — folder `vst/`
+
+Berdasarkan PRD "Robot Trading BrandBisnis (M5 VST Edition)"
+(`docs/PRD-Robot-Trading-M5-VST.md`): bot yang
+**mengirim bracket order** (market + SL/TP terlampir) ke demo trading BingX
+(`marginCoin: VST`). Sistem terpisah dari signal bot di atas; keduanya jalan
+berdampingan.
+
+- **Simbol:** BTC/USDT:USDT saja (env `VST_SYMBOL`).
+- **Mode default: DRY-RUN** — tidak ada order dikirim. Order asli hanya jika
+  `VST_LIVE=1` (env/secret GitHub) **dan** `BINGX_API_KEY`/`BINGX_SECRET_KEY`
+  (API key dibuat di menu *Demo Trading* BingX) terisi.
+- **Strategi (5 layer, dua arah, semua wajib TRUE):** L1 Close vs EMA-200 (M5),
+  L2 dekat swing low/high 20 candle (±0.2%), L3 RSI(14) cross dari <30 (LONG)
+  / >70 (SHORT), L4 Volume > SMA20, L5 ADX(14) > 20.
+- **Risiko:** SL = 1.5x ATR(14), TP = 3.0x ATR(14), RR 1:2, ukuran 100 USDT,
+  leverage 10x.
+- **Pengaman:** freshness guard (candle tutup ≤ 9.5 menit) + di mode live
+  otomatis skip jika sudah ada posisi terbuka di simbul tersebut.
+- **Sumber data:** bingx dengan failover multi-bursa (hanya untuk data;
+  eksekusi selalu di host VST BingX).
+
+```bash
+# simulasi (default): scan + log, tanpa order
+python3 vst/main.py
+
+# paksa simulasi / paksa live
+python3 vst/main.py --dry-run
+python3 vst/main.py --live
+
+# loop lokal tiap kelipatan 5 menit (dev)
+python3 vst/main.py --loop
+
+# tes kredensial Telegram
+python3 vst/main.py --test-telegram
+```
+
 ## Menjalankan Lokal
 
 ```bash
@@ -88,6 +125,7 @@ python3 main.py --loop
 
 ## Perubahan Terkini
 
+- 2026-10-26: sub-sistem VST (folder `vst/`) — eksekusi bracket order demo BingX, dry-run default, cron `cron-vst.yml`.
 - 2026-10-24: timeframe M15 → M5 (higher TF H1 → M15), window freshness 9.5 menit.
 - 2026-10-24: sinyal dua arah LONG/SHORT + rekomendasi leverage (futures standard).
 - 2026-10-24: section "Penjelasan Sinyal" di tiap pesan; cron 15 menit → 5 menit.

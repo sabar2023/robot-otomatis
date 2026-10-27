@@ -69,6 +69,11 @@ berdampingan.
   otomatis skip jika sudah ada posisi terbuka di simbul tersebut.
 - **Sumber data:** bingx dengan failover multi-bursa (hanya untuk data;
   eksekusi selalu di host VST BingX).
+- **Supabase (opsional, tapi disarankan):** isi `SUPABASE_URL` + `SUPABASE_KEY`
+  (anon key) untuk mencatat setiap scan (`ro_scans`), setiap eksekusi
+  (`ro_executions`), dan toggle Auto/Manual (`ro_config.auto_trading`).
+  Jika `auto_trading` = false, mode live otomatis turun ke simulasi.
+  Tanpa kunci, logging DB dilewati tanpa mengganggu trading.
 
 ```bash
 # simulasi (default): scan + log, tanpa order
@@ -106,9 +111,17 @@ python3 main.py --loop
 
 ## Deployment (sudah berjalan)
 
-- Repo: `sabar2023/robot-trading`, branch `main` (push = langsung live).
-- Secrets GitHub yang dipakai: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-- Run manual: tombol *Run workflow* di tab Actions, atau `gh workflow run cron.yml`.
+- **Repo baru (sistem VST):** `sabar2023/robot-otomatis`, branch `main`
+  (push = langsung live). Cron aktif: `cron-vst.yml`. `cron.yml` (signal bot)
+  hanya manual di repo ini karena signal bot tetap jalan di repo lama.
+- **Repo lama (signal bot):** `sabar2023/robot-trading`, branch `main` —
+  tidak diubah, cron `cron.yml` tetap aktif. `cron-vst.yml` di sana dimatikan
+  agar VST tidak jalan dua kali.
+- Secrets repo baru: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
+  `BINGX_API_KEY`, `BINGX_SECRET_KEY`, `SUPABASE_KEY`
+  (+ variable `VST_LIVE` bila ingin live).
+- Run manual: tombol *Run workflow* di tab Actions, atau
+  `gh workflow run cron-vst.yml -R sabar2023/robot-otomatis`.
 - Biaya: repo publik → menit Actions gratis tanpa limit.
 
 ## Catatan Penting (Pitfall)

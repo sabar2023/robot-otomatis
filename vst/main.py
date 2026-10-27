@@ -5,6 +5,7 @@ import sys
 import time
 
 import config
+import database
 import executor
 import filters
 import market_data
@@ -52,6 +53,7 @@ def scan_once(live):
 
     result = filters.evaluate(symbol, base)
     log_evaluation(symbol, result)
+    database.log_scan(symbol, "live" if live else "dry-run", result, src)
 
     if not result["passed"]:
         log.info("Tidak ada sinyal - 5 layer filter tidak tercapai.")
@@ -60,8 +62,13 @@ def scan_once(live):
         log.info("Sinyal %s berbasis candle %s UTC (umur %.1f menit) - basi, dilewati.", symbol, candle_close.strftime("%H:%M"), age_minutes)
         return None
 
+    execute_live = live
+    if execute_live and not database.auto_enabled():
+        log.info("Toggle ro_config.auto_trading = false - eksekusi live dilewati (simulasi).")
+        execute_live = False
     levels = risk.compute_levels(result["direction"], result["price"], result["atr"])
-    execution = executor.execute(levels, live=live, data_source_id=src)
+    execution = executor.execute(levels, live=execute_live, data_source_id=src)
+    database.log_execution(symbol, execution["mode"], levels, execution)
     log.info("Eksekusi [%s]: %s", execution["mode"], execution["detail"])
 
     html = telegram_bot.build_alert_html(result, levels, execution)

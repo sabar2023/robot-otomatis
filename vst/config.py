@@ -55,6 +55,9 @@ BINGX_SECRET_KEY = os.getenv("BINGX_SECRET_KEY", "").strip()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://jklbczruvbxscpwxxfud.supabase.co").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
+
 DATA_EXCHANGES = [
     s.strip().lower()
     for s in os.getenv("VST_DATA_EXCHANGES", "bingx,bybit,kraken,gate,bitget,kucoin").split(",")

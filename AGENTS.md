@@ -21,11 +21,22 @@ python3 vst/main.py
 python3 main.py --test-telegram
 python3 vst/main.py --test-telegram
 
-# push lalu uji di produksi (repo: sabar2023/robot-trading)
+# push lalu uji di produksi (repo: sabar2023/robot-otomatis = sistem VST)
 git add -A && git commit -m "..." && git push
-gh workflow run cron.yml -R sabar2023/robot-trading
-gh run view <run-id> -R sabar2023/robot-trading --log
+gh workflow run cron-vst.yml -R sabar2023/robot-otomatis
+gh run view <run-id> -R sabar2023/robot-otomatis --log
 ```
+
+## Pembagian Repo
+
+- `sabar2023/robot-trading` (lama): signal bot 4 koin, cron `cron.yml` tetap
+  aktif di sana. Repo ini TIDAK boleh dipindah/dimatikan (`cron-vst.yml` di sana
+  sengaja dimatikan agar VST tidak dobel).
+- `sabar2023/robot-otomatis` (baru): sub-sistem VST (folder `vst/`), cron
+  `cron-vst.yml` aktif. `cron.yml` (signal bot) di repo baru hanya manual —
+  signal bot produksi tetap di repo lama.
+- Database: Supabase project "robot otomatis" (`jklbczruvbxscpwxxfud`), tabel
+  `ro_scans`, `ro_executions`, `ro_config` (lihat `vst/database.py`).
 
 ## Aturan Proyek
 
@@ -67,6 +78,10 @@ gh run view <run-id> -R sabar2023/robot-trading --log
   `marginCoin: VST`. Live skip entry jika `fetch_positions` menemukan posisi
   terbuka. Mode live hanya aktif bila `VST_LIVE=1` **dan** API key diisi
   (key dibuat di menu Demo Trading BingX, bukan API key riil).
+  `vst/database.py` (Supabase, best-effort — error DB tidak menghentikan trading)
+  mencatat tiap scan ke `ro_scans`, tiap eksekusi ke `ro_executions`, dan
+  membaca `ro_config.auto_trading` (false = live turun ke simulasi).
+  Tanpa `SUPABASE_KEY`, semua logging DB dilewati.
 
 ## Pitfall Lingkungan (Jangan Diulang)
 

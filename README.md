@@ -49,42 +49,55 @@ Setiap 5 menit (cron `*/5 * * * *`), `main.py` untuk tiap koin:
 | `.env.example` | Template env lokal (nilai riil di `.env` yang gitignored) |
 | `archive/legacy_v1/` | Sistem V1 (FastAPI dashboard + Vite + Cloudflare) sebelum V2 — arsip, bukan dijalankan |
 
-## Sub-sistem VST (Eksekusi Demo BingX) — folder `vst/`
+## Sub-sistem VST V5.0 (Platform Multi-User, Eksekusi BingX VST) — folder `vst/`
 
-Berdasarkan PRD "Robot Trading BrandBisnis (M5 VST Edition)"
-(`docs/PRD-Robot-Trading-M5-VST.md`): bot yang
-**mengirim bracket order** (market + SL/TP terlampir) ke demo trading BingX
-(`marginCoin: VST`). Sistem terpisah dari signal bot di atas; keduanya jalan
-berdampingan.
+Berdasarkan PRD "Robot Trading BrandBisnis (V5.0 — Edisi Platform
+SaaS/Dashboard H1 VST)" (`docs/PRD-Robot-Trading-V5.md`): platform
+**multi-user** day-trading H1: engine Python (1x/jam) membacakan setting tiap
+user dari Supabase, mengeksekusi bracket order **isolated margin** di demo
+BingX (VST) dengan API key masing-masing user, dan mencatat riwayat + PnL.
+Frontend dashboard/APK Flutter membaca tabel Supabase yang sama (di luar repo
+ini).
 
-- **Simbol:** BTC/USDT:USDT saja (env `VST_SYMBOL`).
-- **Mode default: DRY-RUN** — tidak ada order dikirim. Order asli hanya jika
-  `VST_LIVE=1` (env/secret GitHub) **dan** `BINGX_API_KEY`/`BINGX_SECRET_KEY`
-  (API key dibuat di menu *Demo Trading* BingX) terisi.
-- **Strategi (5 layer, dua arah, semua wajib TRUE):** L1 Close vs EMA-200 (M5),
+- **Timeframe:** H1 (env `VST_TIMEFRAME`, opsi 5m/15m/1h/4h), scan 1x/jam.
+- **Multi-user:** `users_profile` + `user_settings` di Supabase. API key &
+  secret key user disimpan **terenkripsi Fernet** (`SETTINGS_ENC_KEY`); engine
+  mendekripsi saat run. `mode_otomatis=false` → tetap di-scan (riwayat tercatat)
+  tapi tanpa order live. Bila belum ada user di DB → fallback akun owner dari
+  env `BINGX_API_KEY`/`BINGX_SECRET_KEY`.
+- **Watchlist per user:** `koin_pilihan[]` manual; jika kosong → default **top-5
+  volume 24h** bursa (env `VST_WATCHLIST_SIZE`).
+- **Mode default: DRY-RUN** — tidak ada order dikirim. Order live hanya jika
+  `VST_LIVE=1` **dan** `ro_config.auto_trading=true` **dan** user
+  `mode_otomatis=true`.
+- **Strategi (5 layer, dua arah, semua wajib TRUE):** L1 Close vs EMA-200 (H1),
   L2 dekat swing low/high 20 candle (±0.2%), L3 RSI(14) cross dari <30 (LONG)
   / >70 (SHORT), L4 Volume > SMA20, L5 ADX(14) > 20.
-- **Risiko:** SL = 2.5%, TP = 7.5% dari entry (RR 1:3; rentang SL 2-3%, TP
-  5-10% via `SL_PCT`/`TP_PCT`), ukuran 100 USDT, leverage 10x.
-- **Pengaman:** freshness guard (candle tutup ≤ 9.5 menit) + di mode live
-  otomatis skip jika sudah ada posisi terbuka di simbul tersebut.
+- **Risiko per user:** SL/TP default **ATR dinamis** (SL = ATR×1.5 clamp 1–5%,
+  TP = ATR×4 clamp 3–12%); user bisa set `sl_persen`/`tp_persen` sendiri
+  (clamp 0.5–20% / 0.5–50%). Leverage 5–10x (default 10). Margin maksimal
+  `margin_persen`% (default 10%) dari saldo VST free per order — PRD: maksimal
+  10% sisa margin per eksekusi.
+- **Pengaman:** freshness guard (candle tutup ≤ 90 menit) + skip entry jika
+  sudah ada posisi terbuka di simbol tersebut + toggle `ro_config.auto_trading`.
 - **Sumber data:** bingx dengan failover multi-bursa (hanya untuk data;
   eksekusi selalu di host VST BingX).
-- **Supabase (opsional, tapi disarankan):** isi `SUPABASE_URL` + `SUPABASE_KEY`
-  (anon key) untuk mencatat setiap scan (`ro_scans`), setiap eksekusi
-  (`ro_executions`), dan toggle Auto/Manual (`ro_config.auto_trading`).
-  Jika `auto_trading` = false, mode live otomatis turun ke simulasi.
-  Tanpa kunci, logging DB dilewati tanpa mengganggu trading.
+- **Supabase:** `ro_scans` (scan per koin), `ro_executions` (order/simulasi),
+  `trade_history` (riwayat + PnL per user), `ro_config` (toggle). Engine baca
+  lintas-user pakai `SUPABASE_SERVICE_KEY`; user Flutter baca data sendiri via
+  auth (RLS aktif).
 
 ```bash
-# simulasi (default): scan + log, tanpa order
-python3 vst/main.py
-
-# paksa simulasi / paksa live
+# simulasi (default): scan semua user, tanpa order
 python3 vst/main.py --dry-run
+
+# paksa live
 python3 vst/main.py --live
 
-# loop lokal tiap kelipatan 5 menit (dev)
+# scan hanya satu user (uji per-user)
+python3 vst/main.py --dry-run --user email-user@contoh.com
+
+# loop lokal tiap awal jam (dev)
 python3 vst/main.py --loop
 
 # tes kredensial Telegram
@@ -113,13 +126,13 @@ python3 main.py --loop
 ## Deployment (sudah berjalan)
 
 - **Pemicu utama:** Cloudflare Worker `bot-cron`
-  (`https://bot-cron.sabar2023.workers.dev`, cron `*/5 * * * *`) memanggil
+  (`https://bot-cron.sabar2023.workers.dev`, cron `0 * * * *`) memanggil
   `workflow_dispatch` ke `cron-vst.yml` (robot-otomatis). Signal bot repo lama
   **dinonaktifkan** (tidak dipicu; manual via tombol Actions bila perlu).
   `schedule` GitHub sengaja **dimatikan** (terbukti di-throttle 4-5 jam) dan
   agar tidak ada run dobel. Gagal dispatch → alert otomatis ke Telegram.
   Manual: `https://bot-cron.sabar2023.workers.dev/run?key=<TRIGGER_KEY>`.
-- **Repo baru (sistem VST):** `sabar2023/robot-otomatis`, branch `main`
+- **Repo baru (sistem V5.0):** `sabar2023/robot-otomatis`, branch `main`
   (push = langsung live). Workflow `cron-vst.yml` (dispatch-only).
   `cron.yml` (signal bot) hanya manual di repo ini karena signal bot tetap
   jalan di repo lama.
@@ -127,8 +140,9 @@ python3 main.py --loop
   `cron.yml` (dispatch-only). `cron-vst.yml` di sana tidak dipakai (VST hanya
   di repo baru).
 - Secrets repo baru: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
-  `BINGX_API_KEY`, `BINGX_SECRET_KEY`, `SUPABASE_KEY`
-  (+ variable `VST_LIVE` bila ingin live).
+  `BINGX_API_KEY`, `BINGX_SECRET_KEY` (fallback owner), `SUPABASE_KEY` (anon),
+  `SUPABASE_SERVICE_KEY` (service role, baca lintas-user), `SETTINGS_ENC_KEY`
+  (kunci Fernet API key user). Variable: `VST_LIVE=1` (aktif), `SUPABASE_URL`.
 - Run manual: tombol *Run workflow* di tab Actions, atau
   `gh workflow run cron-vst.yml -R sabar2023/robot-otomatis`.
 - Biaya: repo publik → menit Actions gratis tanpa limit; Worker cron gratis
@@ -150,6 +164,11 @@ python3 main.py --loop
 
 ## Perubahan Terkini
 
+- 2026-10-27: upgrade V5.0 — platform **multi-user** H1: setting/riwayat per
+  user di Supabase (`users_profile`, `user_settings`, `trade_history`), API key
+  terenkripsi Fernet, leverage 5–10x, margin terisolasi, position sizing
+  10% sisa margin, SL/TP default ATR (bisa di-override user), watchlist
+  default top-5 volume, cron 1x/jam (`0 * * * *`).
 - 2026-10-26: sub-sistem VST (folder `vst/`) — eksekusi bracket order demo BingX, dry-run default, cron `cron-vst.yml`.
 - 2026-10-24: timeframe M15 → M5 (higher TF H1 → M15), window freshness 9.5 menit.
 - 2026-10-24: sinyal dua arah LONG/SHORT + rekomendasi leverage (futures standard).

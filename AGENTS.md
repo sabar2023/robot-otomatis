@@ -1,27 +1,32 @@
 # AGENTS.md — Konteks Kerja untuk Sesi/AI Baru
 
 Proyek ini adalah **signal bot non-execution** (lihat `README.md` untuk detail lengkap
-dan `docs/PRD-Signal-Bot-V2.md` untuk PRD asli). Bot berjalan di GitHub Actions cron
-tiap 5 menit di branch `main` — **push ke main = langsung live di produksi**, jadi
-selalu verifikasi sebelum push.
+dan `docs/PRD-Signal-Bot-V2.md` untuk PRD asli) plus **platform trading multi-user
+V5.0** (folder `vst/`, PRD di `docs/PRD-Robot-Trading-M5-VST.md` = versi H1/multi-user).
+Sistem utama berjalan di GitHub Actions yang dipicu Cloudflare Worker tiap 1 jam di
+branch `main` — **push ke main = langsung live di produksi**, jadi selalu verifikasi
+sebelum push.
 
 ## Perintah Utama
 
 ```bash
 # verifikasi sintaks semua modul
-python3 -m py_compile config.py main.py filters.py risk.py telegram_bot.py market_data.py indicators.py vst/config.py vst/indicators.py vst/market_data.py vst/filters.py vst/risk.py vst/executor.py vst/telegram_bot.py vst/main.py
+python3 -m py_compile config.py main.py filters.py risk.py telegram_bot.py market_data.py indicators.py vst/config.py vst/indicators.py vst/market_data.py vst/filters.py vst/risk.py vst/executor.py vst/telegram_bot.py vst/database.py vst/watchlist.py vst/main.py
 
 # scan sekali dengan data live, tanpa kirim Telegram
 python3 main.py --dry-run
 
-# scan sekali sub-sistem VST (dry-run, tanpa order)
-python3 vst/main.py
+# scan sekali sistem V5.0 multi-user (dry-run, tanpa order)
+python3 vst/main.py --dry-run
+
+# scan sekali hanya satu user tertentu (uji per-user)
+python3 vst/main.py --dry-run --user email-user@contoh.com
 
 # kirim pesan tes ke grupTelegram (butuh .env terisi)
 python3 main.py --test-telegram
 python3 vst/main.py --test-telegram
 
-# push lalu uji di produksi (repo: sabar2023/robot-otomatis = sistem VST)
+# push lalu uji di produksi (repo: sabar2023/robot-otomatis = sistem V5.0)
 git add -A && git commit -m "..." && git push
 gh workflow run cron-vst.yml -R sabar2023/robot-otomatis
 gh run view <run-id> -R sabar2023/robot-otomatis --log
@@ -32,17 +37,24 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - `sabar2023/robot-trading` (lama): signal bot 4 koin, workflow `cron.yml`
   (dispatch-only). Sinyal lama **dimatikan** (tidak dipicu Worker); repo tetap
   utuh, bisa dijalankan manual bila diperlukan.
-- `sabar2023/robot-otomatis` (baru): sub-sistem VST (folder `vst/`),
+- `sabar2023/robot-otomatis` (baru): sistem **V5.0** (folder `vst/`),
   `cron-vst.yml` (dispatch-only). `cron.yml` (signal bot) di repo baru hanya
   manual.
-- Pemicu: Cloudflare Worker `bot-cron` (cron `*/5`, sumber di
+- Pemicu: Cloudflare Worker `bot-cron` (cron `0 * * * *`, sumber di
   `cloudflare/bot-cron/`) **hanya** dispatch `cron-vst.yml` (robot-otomatis)
-  tiap 5 menit. `schedule` GitHub di kedua repo sengaja dimatikan
+  tiap 1 jam. `schedule` GitHub di kedua repo sengaja dimatikan
   (throttle 4-5 jam + anti dobel). Gagal dispatch → alert Telegram otomatis.
+  Endpoint manual: `GET https://bot-cron.sabar2023.workers.dev/run?key=<TRIGGER_KEY>`.
   Secret Worker: `GITHUB_PAT` (fine-grained, Actions: write), `TRIGGER_KEY`,
   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-- Database: Supabase project "robot otomatis" (`jklbczruvbxscpwxxfud`), tabel
-  `ro_scans`, `ro_executions`, `ro_config` (lihat `vst/database.py`).
+- Database: Supabase project "robot otomatis" (`jklbczruvbxscpwxxfud`).
+  Tabel mesin: `ro_scans` (scan per koin), `ro_executions` (per order/simulasi),
+  `ro_config` (toggle `auto_trading`). Tabel SaaS V5.0: `users_profile`
+  (id, email, nama, no_hp), `user_settings` (API key terenkripsi Fernet,
+  `mode_otomatis`, `koin_pilihan[]`, `margin_persen`, `leverage`, `tp_persen`,
+  `sl_persen`), `trade_history` (riwayat + PnL per user, `status` open/simulated).
+  RLS aktif; engine baca/lintas-user pakai service key, user Flutter baca data
+  sendiri via auth. User owner pertama sudah diseed (sabarberkah2017@gmail.com).
 
 ## Aturan Proyek
 
@@ -67,29 +79,34 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   `support_break` (artinya: BTC breaking resistance) dan `far_below_ema200`
   (artinya: BTC jauh di atas EMA200) — sengaja reuse untuk berbagi kode
   `telegram_bot.build_alert_html`.
-- `risk.compute_levels(direction, entry_price, atr_value)` → entry zone, SL, TP
-  (berbasis `SL_PCT`/`TP_PCT` dari config: default SL 2.5%, TP 7.5%),
-  `sl_distance_pct`, `tp_distance_pct`, `leverage` (floor(2%/sl_dist%), clamp
-  2–10x), `rr`.
-- `market_data.make_fetcher(chain)` mengembalikan fetcher yang "nempel" ke bursa
-  terakhir yang sukses dalam satu run (failover per run).
-- Freshness: `main.py menolak sinyal bila candle basis > 9.5 menit` (window 2 candle
-  M5; scan cadence 5 menit). Ini juga mekanisme anti-duplikat, tidak ada state store.
-- Sub-sistem VST (folder `vst/`, PRD di `docs/PRD-Robot-Trading-M5-VST.md`):
-  bot **eksekusi** demo BingX, terpisah dari signal bot di atas.
-  `vst/filters.evaluate(symbol, base)` hanya butuh 1 dataframe M5 (tanpa higher-TF,
-  tanpa BTC rule). Arah LONG/SHORT dievaluasi simultan; menang = 5/5 layer.
-  `vst/executor.execute(levels, live, data_source_id)` → dry-run memakai bursa
-  publik pertama yang sukses `load_markets()` (urutan: sumber data, bingx, chain);
-  live = `ccxt.bingx` + `set_sandbox_mode(True)` (host `open-api-vst.bingx.com`),
-  market order dengan `params={"stopLoss": {...}, "takeProfit": {...}}` +
-  `marginCoin: VST`. Live skip entry jika `fetch_positions` menemukan posisi
-  terbuka. Mode live hanya aktif bila `VST_LIVE=1` **dan** API key diisi
-  (key dibuat di menu Demo Trading BingX, bukan API key riil).
-  `vst/database.py` (Supabase, best-effort — error DB tidak menghentikan trading)
-  mencatat tiap scan ke `ro_scans`, tiap eksekusi ke `ro_executions`, dan
-  membaca `ro_config.auto_trading` (false = live turun ke simulasi).
-  Tanpa `SUPABASE_KEY`, semua logging DB dilewati.
+- `vst/risk.compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, leverage=None, margin_pct=None)`
+  → entry, SL, TP. Default (tanpa override user) = **ATR dinamis**: SL = ATR×1.5 clamp
+  1–5%, TP = ATR×4 clamp 3–12%. Override user (`sl_pct`/`tp_pct`) clamp 0.5–20% /
+  0.5–50%. `leverage` clamp 5–10x (default 10). `margin_pct` = porsi saldo per order
+  (default 10%). Return: `entry, stop_loss, take_profit, rr, atr, sl_distance_pct,
+  tp_distance_pct, margin_pct, leverage`.
+- `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
+  volume 24h dari bursa pertama yang sukses.
+- Multi-user: `vst/database.fetch_users()` baca `user_settings` join `users_profile`
+  (service key), dekripsi API key Fernet (`SETTINGS_ENC_KEY`; nilai plaintext lama
+  tetap terbaca sebagai fallback). Bila DB kosong → fallback akun owner dari env
+  `BINGX_API_KEY`/`BINGX_SECRET_KEY`. User `mode_otomatis=false` tetap di-scan
+  (sinyal tercatat di `ro_scans`/`trade_history` sebagai simulated) tapi tidak
+  ada order live. Eksekusi live juga butuh `ro_config.auto_trading=true`.
+- `vst/executor.execute(levels, live, data_source_id, symbol, credentials)` →
+  dry-run pakai notional simulasi (`SIMULATED_NOTIONAL_USDT`); live = `ccxt.bingx`
+  + `set_sandbox_mode(True)` dengan kredensial per-user, margin mode **isolated**
+  (best-effort: `set_margin_mode` → `set_cross_margin(False)`), sizing =
+  `saldo free VST × margin_pct% × leverage` (PRD: maksimal 10% margin per
+  eksekusi), bracket order `stopLoss`/`takeProfit` + `marginCoin: VST`. Skip entry
+  jika posisi terbuka untuk simbol ini.
+- `vst/database.log_trade(user_id, symbol, levels, execution)` → `trade_history`
+  (`status`: open = order live terkirim, simulated = dry-run/user manual). Kolom
+  `pnl`/`closed_at` diisi proses penutupan (belum ada di engine saat ini).
+- Timeframe H1: `TIMEFRAME_MINUTES=60`, freshness candle tutup ≤ 90 menit, scan
+  1x/jam (Worker `0 * * * *`). Cadence lama M5/5 menit sudah tidak dipakai.
+- Signal bot lama (root) tetap memakai `SL_PCT`/`TP_PCT` fixed + leverage 2–10x —
+  **jangan** campur konstanta root dengan `vst/config.py`.
 
 ## Pitfall Lingkungan (Jangan Diulang)
 
@@ -104,8 +121,11 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - Kredensial git integrasi di environment ini hanya bisa **push** (API 403);
   `gh` CLI (gh auth login device flow, akun sabar2023) yang dipakai untuk secrets,
   workflow dispatch, dan log Actions.
-- Secrets GitHub aktif: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (grup:
-  `TELEGRAM_CHAT_ID` = supergroup "Grup robot trading").
+- Secrets GitHub aktif (robot-otomatis): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+  (grup "Grup robot trading"), `BINGX_API_KEY`/`BINGX_SECRET_KEY` (fallback owner),
+  `SUPABASE_KEY` (anon), `SUPABASE_SERVICE_KEY` (service, untuk `user_settings`/
+  `trade_history` lintas user), `SETTINGS_ENC_KEY` (Fernet, dekripsi API key user).
+  Variables: `VST_LIVE`, `SUPABASE_URL`.
 - `archive/legacy_v1/` itu kode V1 lama (FastAPI + Vite) — jangan diedit/dirujuk
   sebagai referensi perilaku V2 selain membandingkan fitur.
 
@@ -113,8 +133,10 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 
 1. `python3 -m py_compile` semua modul (root + `vst/`).
 2. `python3 main.py --dry-run` → semua koin ter-evaluasi (STANDBY/SINYAL wajar).
-3. `python3 vst/main.py --dry-run` → BTC ter-evaluasi (STANDBY/SINYAL wajar), tidak ada order.
-4. Setelah push: `gh workflow run cron.yml`, tunggu completion, log run terakhir
-   menunjukkan "Sumber data: <bursa>" + baris per-koin tanpa error (cron VST terpisah: `cron-vst.yml`).
+3. `python3 vst/main.py --dry-run` → watchlist owner (default top-5) ter-evaluasi
+   (STANDBY/SINYAL wajar), tidak ada order.
+4. Setelah push: `gh workflow run cron-vst.yml -R sabar2023/robot-otomatis`, tunggu
+   completion, log menampilkan "=== User: ..." + "Sumber data"-less per-koin rows
+   tanpa error. (Cron signal bot lama `cron.yml` sudah off.)
 5. Jika mengubah format pesan: kirim 1 contoh ke grup dengan label CONTOH/TEST
-   (pola: buat dataframe sintetis lolos filter → `build_alert_html` → `send_message`).
+   (pola: buat result sintetis lolos filter → `build_alert_html` → `send_message`).

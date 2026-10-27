@@ -8,13 +8,13 @@ import market_data
 log = logging.getLogger("brandbisnis_vst")
 
 
-def build_trading_exchange():
-    if not config.BINGX_API_KEY or not config.BINGX_SECRET_KEY:
-        raise RuntimeError("BINGX_API_KEY / BINGX_SECRET_KEY kosong - mode live tidak dapat berjalan.")
+def build_trading_exchange(api_key, secret_key):
+    if not api_key or not secret_key:
+        raise RuntimeError("API key / secret key BingX kosong - mode live tidak dapat berjalan.")
     exchange = ccxt.bingx(
         {
-            "apiKey": config.BINGX_API_KEY,
-            "secret": config.BINGX_SECRET_KEY,
+            "apiKey": api_key,
+            "secret": secret_key,
             "enableRateLimit": True,
             "timeout": 30000,
             "options": {"defaultType": "swap"},
@@ -22,6 +22,29 @@ def build_trading_exchange():
     )
     exchange.set_sandbox_mode(True)
     return exchange
+
+
+def free_balance(exchange):
+    last_error = None
+    for params in ({"type": "swap"}, None):
+        try:
+            balance = exchange.fetch_balance(params) if params else exchange.fetch_balance()
+        except Exception as exc:
+            last_error = exc
+            continue
+        coin = balance.get(config.MARGIN_COIN)
+        if isinstance(coin, dict) and coin.get("free") is not None:
+            return float(coin["free"] or 0.0)
+        nested = balance.get("swap") or {}
+        coin = nested.get(config.MARGIN_COIN)
+        if isinstance(coin, dict) and coin.get("free") is not None:
+            return float(coin["free"] or 0.0)
+        total = balance.get("total") or {}
+        if config.MARGIN_COIN in total and total[config.MARGIN_COIN] is not None:
+            return float(total[config.MARGIN_COIN] or 0.0)
+    if last_error:
+        log.warning("fetch_balance gagal: %s", str(last_error).splitlines()[0][:120])
+    return 0.0
 
 
 def open_positions(exchange, symbol):
@@ -33,17 +56,27 @@ def open_positions(exchange, symbol):
     ]
 
 
-def prepare_order(exchange, levels):
-    symbol = config.SYMBOL
-    side = "buy" if levels["direction"] == "LONG" else "sell"
-    amount = float(exchange.amount_to_precision(symbol, config.POSITION_SIZE_USDT / levels["entry"]))
+def compute_size(exchange, symbol, entry, levels):
+    free = free_balance(exchange)
+    if free <= 0:
+        raise RuntimeError(f"Saldo free {config.MARGIN_COIN} = 0 - tidak ada margin untuk entry.")
+    margin_used = free * levels["margin_pct"] / 100.0
+    notional = margin_used * levels["leverage"]
+    amount = float(exchange.amount_to_precision(symbol, notional / entry))
     limits = exchange.market(symbol)["limits"]
     min_amount = float(limits["amount"].get("min") or 0)
     min_cost = float(limits["cost"].get("min") or 0)
     if min_amount and amount < min_amount:
-        raise RuntimeError(f"Ukuran order {amount} di bawah minimum {min_amount} kontrak.")
-    if min_cost and amount * levels["entry"] < min_cost:
-        raise RuntimeError("Notional order di bawah minimum bursa.")
+        raise RuntimeError(f"Ukuran order {amount} di bawah minimum Bursa {min_amount} (saldo {free:,.2f} {config.MARGIN_COIN}).")
+    if min_cost and notional < min_cost:
+        raise RuntimeError(f"Notional order {notional:,.2f} di bawah minimum Bursa {min_cost:,.2f} USDT.")
+    if notional < config.MIN_ORDER_USDT:
+        raise RuntimeError(f"Notional order {notional:,.2f} di bawah minimum {config.MIN_ORDER_USDT:g} USDT.")
+    return amount, margin_used, notional
+
+
+def prepare_order(exchange, symbol, levels, amount):
+    side = "buy" if levels["direction"] == "LONG" else "sell"
     params = {
         "marginCoin": config.MARGIN_COIN,
         "stopLoss": {
@@ -55,7 +88,7 @@ def prepare_order(exchange, levels):
             "type": "TAKE_PROFIT_MARKET",
         },
     }
-    return side, amount, params
+    return side, params
 
 
 def _public_exchange_with_markets(preferred_id):
@@ -88,6 +121,20 @@ def _apply_leverage(exchange, symbol, leverage):
             log.warning("Set leverage %s %dx gagal: %s", side, leverage, str(exc).splitlines()[0][:120])
 
 
+def _set_isolated_margin(exchange, symbol):
+    try:
+        exchange.set_margin_mode("isolated", symbol)
+        log.info("Margin mode isolated terpasang untuk %s.", symbol)
+        return
+    except Exception:
+        pass
+    try:
+        exchange.set_cross_margin(False, symbol)
+        log.info("Margin mode isolated terpasang (via set_cross_margin) untuk %s.", symbol)
+    except Exception as exc:
+        log.info("Margin mode isolated tidak dapat diset - lanjut margin mode default: %s", str(exc).splitlines()[0][:120])
+
+
 def _place_entry_order(exchange, symbol, side, amount, params):
     last_error = None
     for hedged in (True, False):
@@ -104,22 +151,31 @@ def _place_entry_order(exchange, symbol, side, amount, params):
     raise last_error
 
 
-def execute(levels, live, data_source_id=None):
+def execute(levels, live, data_source_id=None, symbol=None, credentials=None):
+    symbol = symbol or config.SYMBOL
     if not live:
         exchange = _public_exchange_with_markets(data_source_id)
-        side, amount, _ = prepare_order(exchange, levels)
+        notional = config.SIMULATED_NOTIONAL_USDT
+        margin_used = notional / levels["leverage"]
+        amount = float(exchange.amount_to_precision(symbol, notional / levels["entry"]))
+        side, _ = prepare_order(exchange, symbol, levels, amount)
         return {
             "mode": "dry-run",
             "executed": False,
             "side": side,
             "amount": amount,
             "order_id": None,
+            "margin_used": margin_used,
+            "notional": notional,
             "detail": "Simulasi - tidak ada order dikirim ke bursa.",
         }
 
-    exchange = build_trading_exchange()
+    if credentials:
+        exchange = build_trading_exchange(credentials["api_key"], credentials["secret_key"])
+    else:
+        exchange = build_trading_exchange(config.BINGX_API_KEY, config.BINGX_SECRET_KEY)
     exchange.load_markets()
-    existing = open_positions(exchange, config.SYMBOL)
+    existing = open_positions(exchange, symbol)
     if existing:
         pos = existing[0]
         return {
@@ -128,18 +184,23 @@ def execute(levels, live, data_source_id=None):
             "side": str(pos.get("side")),
             "amount": float(pos.get("contracts") or 0),
             "order_id": None,
+            "margin_used": None,
+            "notional": None,
             "detail": f"Sudah ada posisi terbuka ({pos['side']} {pos['contracts']} x{pos.get('leverage')}x) - entry baru dilewati.",
         }
 
-    _apply_leverage(exchange, config.SYMBOL, config.LEVERAGE)
-
-    side, amount, params = prepare_order(exchange, levels)
-    order = _place_entry_order(exchange, config.SYMBOL, side, amount, params)
+    _set_isolated_margin(exchange, symbol)
+    _apply_leverage(exchange, symbol, levels["leverage"])
+    amount, margin_used, notional = compute_size(exchange, symbol, levels["entry"], levels)
+    side, params = prepare_order(exchange, symbol, levels, amount)
+    order = _place_entry_order(exchange, symbol, side, amount, params)
     return {
         "mode": "live",
         "executed": True,
         "side": side,
         "amount": amount,
         "order_id": str(order.get("id")),
-        "detail": f"Bracket order VST terkirim, id {order.get('id')}.",
+        "margin_used": margin_used,
+        "notional": notional,
+        "detail": f"Bracket order terisolasi terkirim, id {order.get('id')} (margin {margin_used:,.2f} {config.MARGIN_COIN}).",
     }

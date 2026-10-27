@@ -11,6 +11,7 @@ import filters
 import market_data
 import risk
 import telegram_bot
+import watchlist
 
 log = logging.getLogger("brandbisnis_vst")
 
@@ -24,27 +25,57 @@ def setup_logging():
     )
 
 
+def _one_line(exc):
+    return str(exc).splitlines()[0][:200]
+
+
+def owner_user():
+    return {
+        "id": None,
+        "email": "owner",
+        "nama": "Owner",
+        "api_key": config.BINGX_API_KEY,
+        "secret_key": config.BINGX_SECRET_KEY,
+        "mode_otomatis": True,
+        "coins": [],
+        "margin_pct": None,
+        "leverage": None,
+        "tp_pct": None,
+        "sl_pct": None,
+    }
+
+
+def resolve_users(only_email=None):
+    users = database.fetch_users()
+    if only_email:
+        wanted = only_email.lower()
+        users = [u for u in users if (u["email"] or "").lower() == wanted]
+        if not users:
+            log.warning("User %s tidak ditemukan di user_settings.", only_email)
+        return users
+    if not users:
+        log.info("Belum ada user di Supabase - pakai akun owner (env BINGX_*).")
+        return [owner_user()]
+    return users
+
+
 def log_evaluation(symbol, result):
     status = f"SINYAL {result['direction']}" if result["passed"] else "STANDBY"
-    log.info("%s | %s | harga=%s ATR=%s", symbol, status, f"{result['price']:,.2f}", f"{result['atr']:,.2f}")
+    log.info("%s | %s | harga=%s ATR=%s", symbol, status, f"{result['price']:,.4f}", f"{result['atr']:,.4f}")
     for layer in result["layers"]:
         mark = "PASS" if layer["passed"] else "FAIL"
-        detail = " ".join(f"{k}={v:,.2f}" if isinstance(v, float) else f"{k}={v}" for k, v in layer["detail"].items())
+        detail = " ".join(f"{k}={v:,.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in layer["detail"].items())
         log.info("    %-26s %s | %s", layer["name"], mark, detail)
     if not result["passed"]:
         log.info("    Dibatalkan: %s", ", ".join(result["failed_layers"]))
 
 
-def scan_once(live):
+def scan_symbol(live, fetch, user, symbol, auto_global):
     now = dt.datetime.now(dt.timezone.utc)
-    chain = market_data.build_chain()
-    fetch = market_data.make_fetcher(chain)
-    symbol = config.SYMBOL
-
     log.info("Memindai %s ...", symbol)
     raw, src = fetch(symbol, config.TIMEFRAME, config.CANDLE_LIMIT)
     base = market_data.closed_candles(raw)
-    log.info("Sumber data: %s | %d candle close", src, len(base))
+    log.debug("Sumber data: %s | %d candle close", src, len(base))
 
     candle_open = base["ts"].iloc[-1]
     candle_close = candle_open + dt.timedelta(minutes=config.TIMEFRAME_MINUTES)
@@ -57,46 +88,85 @@ def scan_once(live):
 
     if not result["passed"]:
         log.info("Tidak ada sinyal - 5 layer filter tidak tercapai.")
-        return None
+        return
     if not fresh:
-        log.info("Sinyal %s berbasis candle %s UTC (umur %.1f menit) - basi, dilewati.", symbol, candle_close.strftime("%H:%M"), age_minutes)
-        return None
+        log.info(
+            "Sinyal %s berbasis candle tutup %s UTC (umur %.1f menit) - basi, dilewati.",
+            symbol,
+            candle_close.strftime("%Y-%m-%d %H:%M"),
+            age_minutes,
+        )
+        return
 
-    execute_live = live
-    if execute_live and not database.auto_enabled():
-        log.info("Toggle ro_config.auto_trading = false - eksekusi live dilewati (simulasi).")
-        execute_live = False
-    levels = risk.compute_levels(result["direction"], result["price"], result["atr"])
-    execution = executor.execute(levels, live=execute_live, data_source_id=src)
+    auto = auto_global and bool(user["mode_otomatis"])
+    execute_live = live and auto
+    if live and not auto:
+        log.info("Mode otomatis user / ro_config.auto_trading nonaktif - eksekusi live dilewati (simulasi).")
+
+    levels = risk.compute_levels(
+        result["direction"],
+        result["price"],
+        result["atr"],
+        sl_pct=user["sl_pct"],
+        tp_pct=user["tp_pct"],
+        leverage=user["leverage"],
+        margin_pct=user["margin_pct"],
+    )
+    credentials = {"api_key": user["api_key"], "secret_key": user["secret_key"]}
+    execution = executor.execute(levels, live=execute_live, data_source_id=src, symbol=symbol, credentials=credentials)
     database.log_execution(symbol, execution["mode"], levels, execution)
+    database.log_trade(user["id"], symbol, levels, execution)
     log.info("Eksekusi [%s]: %s", execution["mode"], execution["detail"])
 
-    html = telegram_bot.build_alert_html(result, levels, execution)
+    html = telegram_bot.build_alert_html(result, levels, execution, user)
     try:
         if telegram_bot.send_message(html) is not None:
-            log.info("Pesan VST terkirim ke Telegram.")
+            log.info("Pesan alert terkirim ke Telegram.")
         else:
             log.info("Telegram tidak dikonfigurasi - pesan hanya di log.")
     except Exception as exc:
-        log.error("Gagal mengirim pesan VST ke Telegram: %s", exc)
+        log.error("Gagal kirim alert Telegram: %s", _one_line(exc))
 
-    return {"result": result, "levels": levels, "execution": execution}
+
+def scan_once(live, only_email=None):
+    chain = market_data.build_chain()
+    fetch = market_data.make_fetcher(chain)
+    users = resolve_users(only_email)
+    if not users:
+        log.info("Tidak ada user untuk dipindai.")
+        return 0
+
+    auto_global = database.auto_enabled()
+    watch_cache = {}
+    for user in users:
+        log.info("=== User: %s (%s) | otomatis: %s ===", user["nama"], user["email"], user["mode_otomatis"])
+        if user["coins"]:
+            coins = user["coins"]
+            log.info("Watchlist manual: %s", ", ".join(coins))
+        else:
+            if "default" not in watch_cache:
+                watch_cache["default"], watch_src = watchlist.default_watchlist(chain)
+                log.info("Watchlist default (top %d volume, %s): %s", config.WATCHLIST_SIZE, watch_src, ", ".join(watch_cache["default"]))
+            coins = watch_cache["default"]
+        for symbol in coins:
+            try:
+                scan_symbol(live, fetch, user, symbol, auto_global)
+            except Exception as exc:
+                log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
+    return len(users)
 
 
 def next_boundary(now):
-    interval = config.SCAN_INTERVAL_MINUTES
-    minute = (now.minute // interval) * interval
-    target = now.replace(minute=minute, second=0, microsecond=0) + dt.timedelta(minutes=interval)
-    return target
+    return now.replace(minute=0, second=0, microsecond=0) + dt.timedelta(hours=1)
 
 
-def run_loop(live):
-    log.info("Mode loop lokal: scan sekarang, lalu tiap kelipatan %d menit.", config.SCAN_INTERVAL_MINUTES)
+def run_loop(live, only_email=None):
+    log.info("Mode loop lokal: scan sekarang, lalu tiap awal jam UTC.")
     while True:
         try:
-            scan_once(live)
+            scan_once(live, only_email)
         except Exception as exc:
-            log.error("Error pada siklus: %s", exc)
+            log.error("Error pada siklus: %s", _one_line(exc))
         now = dt.datetime.now(dt.timezone.utc)
         wait = (next_boundary(now) - now).total_seconds()
         if wait > 5:
@@ -105,10 +175,11 @@ def run_loop(live):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=f"{config.PRODUCT_NAME} - eksekusi M5 (BingX VST)")
+    parser = argparse.ArgumentParser(description=f"{config.PRODUCT_NAME}")
     parser.add_argument("--dry-run", action="store_true", help="Paksa mode simulasi - tidak ada order dikirim")
-    parser.add_argument("--live", action="store_true", help="Paksa mode live VST - kirim bracket order (butuh BINGX_API_KEY/BINGX_SECRET_KEY)")
-    parser.add_argument("--loop", action="store_true", help="Jalankan terus tiap kelipatan 5 menit (hanya dev lokal)")
+    parser.add_argument("--live", action="store_true", help="Paksa mode live - kirim order ke BingX VST (demo) user")
+    parser.add_argument("--loop", action="store_true", help="Jalankan terus tiap awal jam (hanya dev lokal)")
+    parser.add_argument("--user", metavar="EMAIL", help="Hanya pindai user dengan email ini")
     parser.add_argument("--test-telegram", action="store_true", help="Kirim pesan tes untuk validasi kredensial Telegram")
     args = parser.parse_args()
 
@@ -120,7 +191,15 @@ def main():
         live = True
     mode_label = "LIVE VST" if live else "DRY-RUN"
     log.info("=== %s | %s | mode: %s ===", config.PRODUCT_NAME, config.TIMEFRAME_LABEL, mode_label)
-    log.info("Simbol: %s | Size: %g USDT | Leverage: %dx | Margin: %s", config.SYMBOL, config.POSITION_SIZE_USDT, config.LEVERAGE, config.MARGIN_COIN)
+    log.info(
+        "Scan tiap %d menit | leverage %d-%dx | margin maksimal %g%%/order | SL/TP default ATR x%.1f/x%.1f",
+        config.SCAN_INTERVAL_MINUTES,
+        config.LEVERAGE_MIN,
+        config.LEVERAGE_MAX,
+        config.MARGIN_PCT,
+        config.ATR_SL_MULT,
+        config.ATR_TP_MULT,
+    )
 
     if args.test_telegram:
         if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
@@ -130,22 +209,24 @@ def main():
         log.info("Pesan tes Telegram terkirim. Kredensial valid.")
         sys.exit(0)
 
-    if live and not (config.BINGX_API_KEY and config.BINGX_SECRET_KEY):
-        log.error("Mode live dipilih tetapi BINGX_API_KEY / BINGX_SECRET_KEY kosong. Jalankan dengan --dry-run atau isi kredensial VST.")
+    users = database.fetch_users()
+    has_user_keys = any(u["api_key"] and u["secret_key"] for u in users)
+    if live and not ((config.BINGX_API_KEY and config.BINGX_SECRET_KEY) or has_user_keys):
+        log.error("Mode live dipilih tetapi tidak ada kredensial BingX (env maupun Supabase). Jalankan dengan --dry-run.")
         sys.exit(1)
     if live:
-        log.warning("MODE LIVE: bracket order akan dikirim ke BingX VST (demo) untuk %s.", config.SYMBOL)
+        log.warning("MODE LIVE: order bracket terisolasi akan dikirim ke BingX VST (demo) untuk user dengan mode otomatis aktif.")
 
     if args.loop:
-        run_loop(live)
+        run_loop(live, args.user)
         return
 
     try:
-        scan_once(live)
+        scan_once(live, args.user)
     except Exception as exc:
-        log.error("Scan gagal: %s", exc)
+        log.error("Scan gagal: %s", _one_line(exc))
         try:
-            telegram_bot.send_message(telegram_bot.build_error_html(str(exc).splitlines()[-1], "live" if live else "dry-run"))
+            telegram_bot.send_message(telegram_bot.build_error_html(_one_line(exc), "live" if live else "dry-run"))
         except Exception:
             pass
         sys.exit(1)

@@ -1,4 +1,4 @@
-name: BrandBisnis VST Bot (M5 Cron)
+name: BrandBisnis V5.0 Bot (H1 Multi-User Cron)
 
 on:
   workflow_dispatch:
@@ -22,15 +22,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run M5 VST scan (BingX VST)
+      - name: Run H1 multi-user scan (BingX VST)
         env:
           VST_LIVE: ${{ vars.VST_LIVE || '0' }}
+          VST_TIMEFRAME: ${{ vars.VST_TIMEFRAME || '1h' }}
           BINGX_API_KEY: ${{ secrets.BINGX_API_KEY }}
           BINGX_SECRET_KEY: ${{ secrets.BINGX_SECRET_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://jklbczruvbxscpwxxfud.supabase.co' }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SETTINGS_ENC_KEY: ${{ secrets.SETTINGS_ENC_KEY }}
           TEST_TELEGRAM: ${{ inputs.test_telegram }}
         run: |
           if [ "$TEST_TELEGRAM" = "true" ]; then

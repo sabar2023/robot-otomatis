@@ -12,7 +12,7 @@ def fmt_price(value):
     return f"{value:,.4f}"
 
 
-def build_alert_html(result, levels, execution):
+def build_alert_html(result, levels, execution, user=None):
     is_long = levels["direction"] == "LONG"
     mode_line = (
         "&#128225; <b>LIVE VST</b> (demo BingX)"
@@ -26,9 +26,19 @@ def build_alert_html(result, levels, execution):
         detail = " ".join(f"{k}={fmt_price(v)}" for k, v in layer["detail"].items())
         layer_lines.append(f"{mark} <b>{layer['name']}</b>: {detail}")
 
+    user_line = None
+    if user and user.get("email") and user["email"] != "owner":
+        user_line = f"&#128100; <b>USER</b>     : {user['email']}"
+    notional = execution.get("notional")
+    margin_used = execution.get("margin_used")
+    size_line = f"&#128176; <b>SIZE</b>     : {notional:,.0f} USDT notional | <b>MARGIN</b>: {margin_used:,.2f} {config.MARGIN_COIN} ({levels['margin_pct']:g}%) | <b>LEVERAGE</b>: {levels['leverage']}x" if notional else (
+        f"&#128176; <b>LEVERAGE</b>: {levels['leverage']}x | <b>MARGIN</b>: {config.MARGIN_COIN} terisolasi"
+    )
+
     lines = [
-        "&#128680; <b>BRANDBISNIS VST ALERT</b> &#128680;",
+        "&#128680; <b>BRANDBISNIS V5.0 ALERT</b> &#128680;",
         mode_line,
+        user_line,
         "",
         f"&#128200; <b>PASANGAN</b> : {result['symbol']}",
         f"&#9200; <b>TIMEFRAME</b> : {result['timeframe']} (basis candle tutup {result['candle_open'].strftime('%Y-%m-%d %H:%M')} UTC)",
@@ -37,7 +47,7 @@ def build_alert_html(result, levels, execution):
         f"&#127919; <b>ENTRY</b>    : {fmt_price(levels['entry'])}",
         f"&#128721; <b>STOP LOSS</b>: {fmt_price(levels['stop_loss'])} ({levels['sl_distance_pct']:.2f}% dari entry)",
         f"&#9989; <b>TAKE PROFIT</b>: {fmt_price(levels['take_profit'])} ({levels['tp_distance_pct']:.2f}% dari entry | RR 1:{levels['rr']:g})",
-        f"&#128176; <b>SIZE</b>     : {levels['size_usdt']:g} USDT | <b>LEVERAGE</b>: {levels['leverage']}x | <b>MARGIN</b>: {config.MARGIN_COIN}",
+        size_line,
         "",
         "&#128221; <b>5-Layer Check:</b>",
         *layer_lines,
@@ -76,9 +86,10 @@ def send_message(text):
 
 def send_test_message(live):
     body = (
-        "&#128225; <b>BRANDBISNIS VST BOT</b>\n"
+        "&#128225; <b>BRANDBISNIS V5.0 BOT</b>\n"
         f"Bot aktif. Mode: <b>{'LIVE VST (demo BingX)' if live else 'DRY-RUN'}</b>.\n"
-        f"Menyusun 5-Layer Filter {config.TIMEFRAME_LABEL} untuk {config.SYMBOL} setiap {config.SCAN_INTERVAL_MINUTES} menit.\n"
-        f"Order: bracket SL/TP {config.SL_PCT:g}%/{config.TP_PCT:g}% dari entry, leverage {config.LEVERAGE}x, margin {config.MARGIN_COIN}."
+        f"Menyusun 5-Layer Filter {config.TIMEFRAME_LABEL} (multi-user) setiap {config.SCAN_INTERVAL_MINUTES} menit.\n"
+        f"Order: bracket SL/TP (default ATR x{config.ATR_SL_MULT:g}/x{config.ATR_TP_MULT:g}, bisa di-set user), "
+        f"leverage {config.LEVERAGE_MIN}-{config.LEVERAGE_MAX}x, margin maksimal {config.MARGIN_PCT:g}% per order, terisolasi."
     )
     return send_message(body)

@@ -1,0 +1,7 @@
+name = "bot-cron"
+main = "src/index.js"
+compatibility_date = "2026-10-27"
+account_id = "bab236ff5ad32c3b8034a8551696de82"
+
+[triggers]
+crons = ["*/5 * * * *"]

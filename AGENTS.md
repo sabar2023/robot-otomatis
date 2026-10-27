@@ -35,8 +35,8 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - `sabar2023/robot-otomatis` (baru): sub-sistem VST (folder `vst/`),
   `cron-vst.yml` (dispatch-only). `cron.yml` (signal bot) di repo baru hanya
   manual — signal bot produksi tetap di repo lama.
-- Pemicu: Cloudflare Worker `bot-cron` (cron `*/5`, `wrangler` project di luar
-  repo) dispatch kedua workflow tiap 5 menit. `schedule` GitHub di kedua repo
+- Pemicu: Cloudflare Worker `bot-cron` (cron `*/5`, sumber di
+  `cloudflare/bot-cron/`) dispatch kedua workflow tiap 5 menit. `schedule` GitHub di kedua repo
   sengaja dimatikan (throttle 4-5 jam + anti dobel). Secret Worker:
   `GITHUB_PAT` (fine-grained, Actions: write) dan `TRIGGER_KEY`.
 - Database: Supabase project "robot otomatis" (`jklbczruvbxscpwxxfud`), tabel

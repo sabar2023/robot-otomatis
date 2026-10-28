@@ -130,6 +130,19 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - Kredensial git integrasi di environment ini hanya bisa **push** (API 403);
   `gh` CLI (gh auth login device flow, akun sabar2023) yang dipakai untuk secrets,
   workflow dispatch, dan log Actions.
+- **`open-api-vst.bingx.com` = domain resmi "simulasi" BingX** (mata uang VST,
+  **hanya perpetual**, tanpa spot/std futures). Top-up VST: `POST /openApi/swap/v2/
+  trade/getVst` (`adjustType=0` tambah, `amount` **integer**). API BingX kini v3:
+  header `X-BX-APIKEY` + `X-SOURCE-KEY`, signature HMAC di **query string**
+  (`...&signature=`), bukan di header — ccxt versi terpasang sudah menangani.
+- **"Akun USDT Virtual" di APK BingX = simulasi dalam-aplikasi tanpa API**, bukan
+  pool VST. Terbukti: +10.005 VST via `getVst` tidak mengubah saldo virtual di APK
+  dan posisi VST tidak pernah muncul di sana (host real pun tidak melihatnya).
+  Artinya order engine **tidak akan pernah** tampil di APK selama memakai VST;
+  satu-satunya pool yang sama antara API & APK adalah **USDT real**.
+- **`fetch_position_history` BingX**: ccxt memetakan `pnl`/`last`/`closePrice`
+  kosong. `vst/pnl.py` membaca raw `info`: `netProfit` (fallback `realisedProfit`),
+  waktu tutup `updateTime`, harga tutup `avgClosePrice`.
 - Secrets GitHub aktif (robot-otomatis): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
   (grup "Grup robot trading"), `BINGX_API_KEY`/`BINGX_SECRET_KEY` (fallback owner),
   `SUPABASE_KEY` (anon), `SUPABASE_SERVICE_KEY` (service, untuk `user_settings`/

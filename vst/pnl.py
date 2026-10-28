@@ -67,10 +67,15 @@ def sync_closed_trades(user):
             log.warning("Position history %s gagal: %s", sym, str(exc).splitlines()[0][:120])
             continue
         for h in hist or []:
-            ts = h.get("last") or h.get("timestamp")
+            info = h.get("info") or {}
+            ts = info.get("updateTime") or h.get("last") or h.get("timestamp")
             if not ts:
                 continue
-            closed_map.setdefault((h["symbol"], str(h.get("side") or "").lower()), []).append({"h": h, "ts": int(ts)})
+            try:
+                ts = int(ts)
+            except (TypeError, ValueError):
+                continue
+            closed_map.setdefault((h["symbol"], str(h.get("side") or "").lower()), []).append({"h": h, "ts": ts})
 
     closed_count = 0
     for row in open_rows:
@@ -79,7 +84,13 @@ def sync_closed_trades(user):
         if not candidates:
             continue
         best = max(candidates, key=lambda c: c["ts"])
-        pnl_val = best["h"].get("pnl")
+        best_h = best["h"]
+        info = best_h.get("info") or {}
+        pnl_val = info.get("netProfit")
+        if pnl_val is None:
+            pnl_val = info.get("realisedProfit")
+        if pnl_val is None:
+            pnl_val = best_h.get("pnl")
         try:
             pnl_val = float(pnl_val) if pnl_val is not None else None
         except (TypeError, ValueError):

@@ -9,6 +9,7 @@ import database
 import executor
 import filters
 import market_data
+import pnl
 import risk
 import telegram_bot
 import watchlist
@@ -42,6 +43,7 @@ def owner_user():
         "leverage": None,
         "tp_pct": None,
         "sl_pct": None,
+        "tg_chat_id": None,
     }
 
 
@@ -121,9 +123,13 @@ def scan_symbol(live, fetch, user, symbol, auto_global):
     html = telegram_bot.build_alert_html(result, levels, execution, user)
     try:
         if telegram_bot.send_message(html) is not None:
-            log.info("Pesan alert terkirim ke Telegram.")
+            log.info("Pesan alert terkirim ke Telegram (admin).")
         else:
             log.info("Telegram tidak dikonfigurasi - pesan hanya di log.")
+        user_chat = (user.get("tg_chat_id") or "").strip()
+        if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
+            if telegram_bot.send_message(html, chat_id=user_chat) is not None:
+                log.info("Pesan alert terkirim ke chat user %s.", user["email"])
     except Exception as exc:
         log.error("Gagal kirim alert Telegram: %s", _one_line(exc))
 
@@ -153,6 +159,9 @@ def scan_once(live, only_email=None):
                 scan_symbol(live, fetch, user, symbol, auto_global)
             except Exception as exc:
                 log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
+    closed = pnl.sync_all(users, live)
+    if closed:
+        log.info("PnL: %d trade dinyatakan tertutup.", closed)
     return len(users)
 
 

@@ -89,6 +89,8 @@
         <input type="text" id="sApi" placeholder="Biarkan kosong bila sudah pernah diisi">
         <label>Secret Key</label>
         <input type="text" id="sSec" placeholder="Biarkan kosong bila sudah pernah diisi">
+        <label>Telegram Chat ID (opsional — notifikasi sinyal ke chat/grup Anda)</label>
+        <input type="text" id="sTg" placeholder="cth: -1001234567890 (dari @userinfobot)">
         <div class="note">Isi API key dari menu Demo Trading BingX (VST). Kolom kosong saat load = key sudah tersimpan di sistem (tidak ditampilkan kembali untuk keamanan).</div>
       </div>
 
@@ -231,6 +233,7 @@ async function loadProfileAndSettings(){
     document.getElementById("sMargin").value = st.margin_persen;
     document.getElementById("sTp").value = st.tp_persen ?? "";
     document.getElementById("sSl").value = st.sl_persen ?? "";
+    document.getElementById("sTg").value = st.tg_chat_id || "";
   }
   syncModeLabel();
 }
@@ -260,6 +263,7 @@ async function saveSettings(){
   if (api) payload.api_key_encrypted = api;
   const sec = document.getElementById("sSec").value.trim();
   if (sec) payload.secret_key_encrypted = sec;
+  payload.tg_chat_id = document.getElementById("sTg").value.trim() || null;
   const { error } = await sb.from("user_settings").upsert(payload, { onConflict: "user_id" });
   if (error){ msg.textContent = "Gagal simpan: " + error.message; msg.className = "msg err"; return; }
   document.getElementById("sApi").value = "";

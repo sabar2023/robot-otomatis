@@ -67,15 +67,15 @@ def build_error_html(message, mode):
     )
 
 
-def send_message(text):
+def send_message(text, chat_id=None):
     token = config.TELEGRAM_BOT_TOKEN
-    chat_id = config.TELEGRAM_CHAT_ID
-    if not token or not chat_id:
+    chat = chat_id or config.TELEGRAM_CHAT_ID
+    if not token or not chat:
         return None
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     resp = requests.post(
         url,
-        json={"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True},
+        json={"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True},
         timeout=30,
     )
     data = resp.json()

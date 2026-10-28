@@ -192,6 +192,7 @@ def fetch_users():
                     "leverage": row.get("leverage"),
                     "tp_pct": row.get("tp_persen"),
                     "sl_pct": row.get("sl_persen"),
+                    "tg_chat_id": row.get("tg_chat_id"),
                 }
             )
         return users

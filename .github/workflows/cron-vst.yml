@@ -7,6 +7,10 @@ on:
         description: "Kirim pesan tes Telegram saja"
         type: boolean
         default: false
+      test_alert:
+        description: "Kirim contoh alert Telegram dari eksekusi terakhir"
+        type: boolean
+        default: false
 
 jobs:
   vst-scan:
@@ -35,9 +39,12 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SETTINGS_ENC_KEY: ${{ secrets.SETTINGS_ENC_KEY }}
           TEST_TELEGRAM: ${{ inputs.test_telegram }}
+          TEST_ALERT: ${{ inputs.test_alert }}
         run: |
           if [ "$TEST_TELEGRAM" = "true" ]; then
             python3 vst/main.py --test-telegram
+          elif [ "$TEST_ALERT" = "true" ]; then
+            python3 vst/telegram_alert_demo.py
           else
             python3 vst/main.py
           fi

@@ -220,3 +220,22 @@ def auto_enabled():
     except Exception as exc:
         log.warning("Supabase ro_config tidak terbaca: %s", _err_text(exc))
     return True
+
+
+def latest_execution():
+    if not is_configured():
+        return None
+    try:
+        resp = requests.get(
+            f"{_url()}/rest/v1/ro_executions?select=*&order=ts.desc&limit=1",
+            headers=_headers(_service_key()),
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            log.warning("Supabase ro_executions: HTTP %s %s", resp.status_code, resp.text[:150])
+            return None
+        rows = resp.json()
+        return rows[0] if rows else None
+    except Exception as exc:
+        log.warning("Supabase ro_executions gagal: %s", _err_text(exc))
+        return None

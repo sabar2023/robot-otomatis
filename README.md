@@ -108,6 +108,9 @@ python3 vst/main.py --loop
 
 # tes kredensial Telegram
 python3 vst/main.py --test-telegram
+
+# kirim contoh alert ke Telegram dari eksekusi terakhir (cek format pesan)
+python3 vst/telegram_alert_demo.py
 ```
 
 ## Aplikasi Flutter (Web + APK) — folder `app/`

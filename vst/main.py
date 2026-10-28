@@ -199,7 +199,10 @@ def main():
     if args.live:
         live = True
     mode_label = "LIVE VST" if live else "DRY-RUN"
-    log.info("=== %s | %s | mode: %s ===", config.PRODUCT_NAME, config.TIMEFRAME_LABEL, mode_label)
+    env_label = executor.execution_env_label()
+    if live and config.EXEC_MODE == "real":
+        mode_label = "LIVE REAL"
+    log.info("=== %s | %s | mode: %s | lingkungan: %s ===", config.PRODUCT_NAME, config.TIMEFRAME_LABEL, mode_label, env_label)
     log.info(
         "Scan tiap %d menit | leverage %d-%dx | margin maksimal %g%%/order | SL/TP default ATR x%.1f/x%.1f",
         config.SCAN_INTERVAL_MINUTES,
@@ -224,7 +227,10 @@ def main():
         log.error("Mode live dipilih tetapi tidak ada kredensial BingX (env maupun Supabase). Jalankan dengan --dry-run.")
         sys.exit(1)
     if live:
-        log.warning("MODE LIVE: order bracket terisolasi akan dikirim ke BingX VST (demo) untuk user dengan mode otomatis aktif.")
+        log.warning(
+            "MODE LIVE: order bracket terisolasi akan dikirim ke %s untuk user dengan mode otomatis aktif.",
+            executor.execution_env_label(),
+        )
 
     if args.loop:
         run_loop(live, args.user)

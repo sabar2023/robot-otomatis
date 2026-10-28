@@ -14,11 +14,12 @@ def fmt_price(value):
 
 def build_alert_html(result, levels, execution, user=None):
     is_long = levels["direction"] == "LONG"
-    mode_line = (
-        "&#128225; <b>LIVE VST</b> (demo BingX)"
-        if execution["mode"] == "live"
-        else "&#9888;&#65039; <b>DRY-RUN</b> (simulasi, tanpa order)"
-    )
+    if execution["mode"] == "live" and config.EXEC_MODE == "real":
+        mode_line = "&#128225; <b>LIVE (BingX akun real, USDT)</b>"
+    elif execution["mode"] == "live":
+        mode_line = "&#128225; <b>LIVE VST</b> (demo BingX)"
+    else:
+        mode_line = "&#9888;&#65039; <b>DRY-RUN</b> (simulasi, tanpa order)"
     pos_line = "&#128994; <b>POSISI</b>  : LONG (BUY)" if is_long else "&#128308; <b>POSISI</b>  : SHORT (SELL)"
     layer_lines = []
     for layer in result["layers"]:

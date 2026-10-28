@@ -20,8 +20,12 @@ def build_trading_exchange(api_key, secret_key):
             "options": {"defaultType": "swap"},
         }
     )
-    exchange.set_sandbox_mode(True)
+    exchange.set_sandbox_mode(config.EXEC_MODE != "real")
     return exchange
+
+
+def execution_env_label():
+    return "BingX USDT (akun real)" if config.EXEC_MODE == "real" else "BingX VST (demo)"
 
 
 def free_balance(exchange):

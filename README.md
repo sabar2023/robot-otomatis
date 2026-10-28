@@ -56,8 +56,8 @@ SaaS/Dashboard H1 VST)" (`docs/PRD-Robot-Trading-V5.md`): platform
 **multi-user** day-trading H1: engine Python (1x/jam) membacakan setting tiap
 user dari Supabase, mengeksekusi bracket order **isolated margin** di demo
 BingX (VST) dengan API key masing-masing user, dan mencatat riwayat + PnL.
-Frontend dashboard/APK Flutter membaca tabel Supabase yang sama (di luar repo
-ini).
+Aplikasi web/APK Flutter resmi ada di folder `app/` (mencari tabel Supabase
+yang sama via auth + RLS).
 
 - **Timeframe:** H1 (env `VST_TIMEFRAME`, opsi 5m/15m/1h/4h), scan 1x/jam.
 - **Multi-user:** `users_profile` + `user_settings` di Supabase. API key &
@@ -86,6 +86,12 @@ ini).
   `trade_history` (riwayat + PnL per user), `ro_config` (toggle). Engine baca
   lintas-user pakai `SUPABASE_SERVICE_KEY`; user Flutter baca data sendiri via
   auth (RLS aktif).
+- **PnL realisasi otomatis:** `vst/pnl.py` — tiap run, baris `trade_history`
+  `status=open` dicocokkan dengan `fetch_position_history` BingX (90 hari);
+  posisi yang sudah tertutup (SL/TP terketuk) diisi `pnl` + `closed_at`
+  (status `closed`).
+- **Notifikasi per user:** selain grup utama, bila user mengisi
+  `user_settings.tg_chat_id`, sinyal juga dikirim ke chat pribadi user tersebut.
 
 ```bash
 # simulasi (default): scan semua user, tanpa order
@@ -103,6 +109,26 @@ python3 vst/main.py --loop
 # tes kredensial Telegram
 python3 vst/main.py --test-telegram
 ```
+
+## Aplikasi Flutter (Web + APK) — folder `app/`
+
+Frontend resmi V5.0: login Supabase (email/kata sandi, auto-confirm), dashboard
+pengaturan (moda otomatis, koin pilihan, leverage, margin, SL/TP, API key
+BingX, Telegram chat ID), dan riwayat trade per user dengan PnL + hapus baris.
+Tema dark teal gaya 3D.
+
+```bash
+# build web (hasil di app/build/web, serve statis apa pun)
+cd app && flutter build web --release
+
+# build APK (lokal butuh Android SDK; CI menjalan otomatis)
+flutter build apk --release
+```
+
+- CI APK: `.github/workflows/app-apk.yml` — build otomatis tiap push yang
+  menyentuh `app/`; hasil di tab Actions (artifact `brandbisnis-app-apk`).
+- Prototipe dashboard web (HTML statis, untuk tes cepat):
+  `web/dashboard-test/`.
 
 ## Menjalankan Lokal
 
@@ -164,6 +190,10 @@ python3 main.py --loop
 
 ## Perubahan Terkini
 
+- 2026-10-28: aplikasi Flutter resmi di `app/` (web + APK via CI
+  `app-apk.yml`); sync PnL posisi tertutup otomatis tiap run (`vst/pnl.py`);
+  notifikasi Telegram per user (`tg_chat_id`); prototipe dashboard web di
+  `web/dashboard-test/`.
 - 2026-10-27: upgrade V5.0 — platform **multi-user** H1: setting/riwayat per
   user di Supabase (`users_profile`, `user_settings`, `trade_history`), API key
   terenkripsi Fernet, leverage 5–10x, margin terisolasi, position sizing

@@ -87,6 +87,15 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   tp_distance_pct, margin_pct, leverage`.
 - `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
   volume 24h dari bursa pertama yang sukses.
+- `vst/pnl.sync_all(users, live)`: tiap run, baris `trade_history`
+  `status=open` dicocokkan `fetch_position_history` BingX per simbol
+  (wajib `params={"until": now_ms}` — API BingX menolak tanpa `endTs`);
+  posisi tertutup → PATCH `pnl`/`closed_at`, status `closed`.
+- Notifikasi: sinyal selalu ke grup utama; bila `user_settings.tg_chat_id`
+  terisi → juga ke chat user (`send_message(text, chat_id=None)`).
+- `app/` = aplikasi Flutter resmi (web+android), auth Supabase + RLS;
+  `web/dashboard-test/` = prototipe HTML dashboard tes. APK via CI
+  `app-apk.yml` (build jalan di Actions, bukan lokal).
 - Multi-user: `vst/database.fetch_users()` baca `user_settings` join `users_profile`
   (service key), dekripsi API key Fernet (`SETTINGS_ENC_KEY`; nilai plaintext lama
   tetap terbaca sebagai fallback). Bila DB kosong → fallback akun owner dari env

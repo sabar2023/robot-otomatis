@@ -1,3 +1,4 @@
+import datetime as dt
 import logging
 
 import requests
@@ -70,6 +71,27 @@ def decrypt_secret(value):
             raise RuntimeError("SETTINGS_ENC_KEY kosong - tidak bisa mendekripsi API key")
         return key.decrypt(value.encode()).decode()
     return value
+
+
+def _store_encrypted(user_id, api_key, secret_key):
+    if not is_configured() or not _fernet() or not user_id:
+        return
+    payload = {"updated_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+    if api_key:
+        payload["api_key_encrypted"] = encrypt_secret(api_key)
+    if secret_key:
+        payload["secret_key_encrypted"] = encrypt_secret(secret_key)
+    try:
+        resp = requests.patch(
+            f"{_url()}/rest/v1/user_settings?user_id=eq.{user_id}",
+            headers=_headers(_service_key()),
+            json=payload,
+            timeout=15,
+        )
+        if resp.status_code >= 300:
+            log.warning("Migrasi enkripsi user %s: HTTP %s", user_id, resp.status_code)
+    except Exception as exc:
+        log.warning("Migrasi enkripsi user %s gagal: %s", user_id, _err_text(exc))
 
 
 def log_scan(symbol, mode, result, source):
@@ -147,12 +169,16 @@ def fetch_users():
             profile = row.get("users_profile") or {}
             user_id = row.get("user_id")
             email = (profile.get("email") or "?")
+            raw_api = row.get("api_key_encrypted") or ""
+            raw_sec = row.get("secret_key_encrypted") or ""
             try:
-                api_key = (decrypt_secret(row.get("api_key_encrypted")) or "").strip()
-                secret_key = (decrypt_secret(row.get("secret_key_encrypted")) or "").strip()
+                api_key = (decrypt_secret(raw_api) or "").strip()
+                secret_key = (decrypt_secret(raw_sec) or "").strip()
             except Exception as exc:
                 log.warning("Gagal dekripsi API key user %s: %s", email, _err_text(exc))
                 continue
+            if _fernet() and ((raw_api and not raw_api.startswith("gAAAAA")) or (raw_sec and not raw_sec.startswith("gAAAAA"))):
+                _store_encrypted(user_id, api_key, secret_key)
             users.append(
                 {
                     "id": user_id,

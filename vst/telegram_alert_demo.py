@@ -89,7 +89,7 @@ def main():
     if sent is None:
         log.error("Telegram tidak dikonfigurasi - contoh alert tidak terkirim.")
         sys.exit(1)
-    message_id = sent.get("message_id") if isinstance(sent, dict) else sent
+    message_id = (sent.get("result") or {}).get("message_id") if isinstance(sent, dict) else sent
     log.info("Contoh alert terkirim ke grup Telegram (message id %s).", message_id)
 
     user_chat = (user.get("tg_chat_id") or "").strip()

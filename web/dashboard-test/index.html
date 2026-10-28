@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BrandBisnis V5.0 — Dashboard Tes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root { --teal:#0d9488; --teal-d:#0f766e; --teal-l:#ccfbf1; --ink:#0f172a; --mut:#64748b; --bg:#f1f5f9; --card:#ffffff; --red:#e11d48; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; }
+  .wrap { max-width:880px; margin:0 auto; padding:24px 16px 60px; }
+  .brand { font-size:20px; font-weight:800; color:var(--teal-d); letter-spacing:.3px; }
+  .brand span { color:var(--ink); }
+  .card { background:var(--card); border-radius:16px; padding:24px; margin-top:16px; box-shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px -12px rgba(13,148,136,.25); }
+  .h { font-size:15px; font-weight:700; margin-bottom:14px; color:var(--ink); }
+  label { display:block; font-size:12.5px; font-weight:600; color:var(--mut); margin:12px 0 5px; }
+  input[type=text],input[type=password],input[type=number] { width:100%; padding:11px 12px; border:1.5px solid #e2e8f0; border-radius:10px; font-size:14px; background:#f8fafc; }
+  input:focus { outline:none; border-color:var(--teal); background:#fff; }
+  .btn3d { display:inline-block; border:none; cursor:pointer; font-weight:800; font-size:14px; color:#fff; background:linear-gradient(180deg,#14b8a6,#0d9488); padding:12px 22px; border-radius:12px; box-shadow:0 4px 0 var(--teal-d),0 8px 16px -6px rgba(13,148,136,.5); transition:transform .05s,box-shadow .05s; }
+  .btn3d:active { transform:translateY(3px); box-shadow:0 1px 0 var(--teal-d); }
+  .btn3d.ghost { background:linear-gradient(180deg,#fff,#f1f5f9); color:var(--teal-d); box-shadow:0 4px 0 #cbd5e1; }
+  .btn3d.red { background:linear-gradient(180deg,#f43f5e,#e11d48); box-shadow:0 4px 0 #9f1239; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
+  @media(max-width:600px){ .grid2{grid-template-columns:1fr;} }
+  .msg { margin-top:12px; font-size:13px; font-weight:600; min-height:18px; }
+  .msg.ok { color:var(--teal-d); } .msg.err { color:var(--red); }
+  .pill { display:inline-flex; align-items:center; gap:6px; background:var(--teal-l); color:var(--teal-d); font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--mut); font-size:11.5px; text-transform:uppercase; letter-spacing:.4px; padding:8px 8px; border-bottom:1.5px solid #e2e8f0; }
+  td { padding:9px 8px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+  .up { color:var(--teal-d); font-weight:700; } .dn { color:var(--red); font-weight:700; }
+  .switch { position:relative; width:46px; height:26px; flex:none; }
+  .switch input { opacity:0; width:0; height:0; }
+  .slider { position:absolute; inset:0; background:#cbd5e1; border-radius:999px; transition:.2s; cursor:pointer; }
+  .slider:before { content:""; position:absolute; width:20px; height:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+  .switch input:checked + .slider { background:var(--teal); }
+  .switch input:checked + .slider:before { transform:translateX(20px); }
+  .mini { padding:7px 12px; font-size:12px; border-radius:9px; }
+  .hidden { display:none; }
+  .note { font-size:12px; color:var(--mut); margin-top:8px; line-height:1.5; }
+  .tabs { display:flex; gap:8px; margin-top:20px; }
+  .tab { font-size:13px; font-weight:700; color:var(--mut); padding:9px 16px; border-radius:10px; cursor:pointer; background:#e2e8f0; }
+  .tab.on { background:var(--teal-l); color:var(--teal-d); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between">
+    <div class="brand">BRANDBISNIS <span>V5.0</span> <span style="font-weight:500;color:var(--mut);font-size:12px">dashboard tes login</span></div>
+    <span id="who" class="pill hidden"></span>
+  </div>
+
+  <div id="authArea">
+    <div class="card">
+      <div class="h">Masuk</div>
+      <label>Email</label>
+      <input type="text" id="liEmail" autocomplete="username">
+      <label>Password</label>
+      <input type="password" id="liPass" autocomplete="current-password">
+      <div class="row" style="margin-top:16px">
+        <button class="btn3d" onclick="doLogin()">Masuk</button>
+        <button class="btn3d ghost" onclick="doRegister()">Daftar akun baru</button>
+      </div>
+      <div id="liMsg" class="msg"></div>
+      <div class="note">Akun owner default sudah tersedia. Password awal dikirim di chat — segera ganti setelah masuk (Supabase Dashboard → Authentication → Users → Reset password).</div>
+    </div>
+  </div>
+
+  <div id="appArea" class="hidden">
+    <div class="tabs">
+      <div class="tab on" id="tabPengaturan" onclick="showTab('pengaturan')">Pengaturan Akun</div>
+      <div class="tab" id="tabRiwayat" onclick="showTab('riwayat')">Riwayat & PnL</div>
+    </div>
+
+    <div id="panePengaturan">
+      <div class="card">
+        <div class="h">Profil</div>
+        <div class="grid2">
+          <div><label>Nama</label><input type="text" id="pNama"></div>
+          <div><label>No. HP</label><input type="text" id="pHp"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="h">API Key BingX (disimpan terenkripsi)</div>
+        <label>API Key</label>
+        <input type="text" id="sApi" placeholder="Biarkan kosong bila sudah pernah diisi">
+        <label>Secret Key</label>
+        <input type="text" id="sSec" placeholder="Biarkan kosong bila sudah pernah diisi">
+        <div class="note">Isi API key dari menu Demo Trading BingX (VST). Kolom kosong saat load = key sudah tersimpan di sistem (tidak ditampilkan kembali untuk keamanan).</div>
+      </div>
+
+      <div class="card">
+        <div class="h">Strategi & Risiko</div>
+        <label>Mode</label>
+        <div class="row">
+          <span class="switch"><input type="checkbox" id="sMode"><span class="slider"></span></span>
+          <span id="modeLabel" style="font-size:13px;font-weight:700">Manual</span>
+        </div>
+        <div class="grid2" style="margin-top:6px">
+          <div><label>koin_pilihan (kosong = top-5 volume)</label><input type="text" id="sCoins" placeholder="cth: BTC/USDT:USDT, ETH/USDT:USDT"></div>
+          <div><label>Leverage (5-10x)</label><input type="number" id="sLev" min="5" max="10"></div>
+          <div><label>Margin maks per order (%)</label><input type="number" id="sMargin" min="1" max="100"></div>
+          <div><label>TP persentase (kosong = ATR dinamis)</label><input type="number" id="sTp" step="0.1"></div>
+          <div><label>SL persentase (kosong = ATR dinamis)</label><input type="number" id="sSl" step="0.1"></div>
+        </div>
+        <div class="row" style="margin-top:18px">
+          <button class="btn3d" onclick="saveSettings()">Simpan</button>
+        </div>
+        <div id="setMsg" class="msg"></div>
+      </div>
+    </div>
+
+    <div id="paneRiwayat" class="hidden">
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div class="h" style="margin:0">Riwayat Trade (trade_history)</div>
+          <button class="btn3d ghost mini" onclick="loadHistory()">Muat ulang</button>
+        </div>
+        <div style="overflow-x:auto;margin-top:10px">
+          <table>
+            <thead><tr><th>Koin</th><th>Arah</th><th>Entry</th><th>SL</th><th>TP</th><th>Lev</th><th>Qty</th><th>PnL</th><th>Status</th><th>Tanggal</th><th></th></tr></thead>
+            <tbody id="histBody"><tr><td colspan="11" style="color:var(--mut)">Belum ada data.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px">
+    <div class="h">Aksi</div>
+    <div class="row">
+      <button class="btn3d red" id="btnOut" onclick="doLogout()" style="display:none">Keluar</button>
+    </div>
+    <div class="note">Halaman ini = frontend tes (Supabase Auth + RLS). Frontend resmi = aplikasi Flutter Web/APK sesuai PRD V5.0 (fase berikutnya).</div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://jklbczruvbxscpwxxfud.supabase.co";
+const SUPABASE_PUBKEY = "sb_publishable_Jj5TIfWxCu2vbsaj9Uoneg_EZjYrkta";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBKEY);
+
+let profile = null;
+
+async function boot(){
+  const { data } = await sb.auth.getSession();
+  if (data && data.session) enterApp();
+}
+
+function showAuthMsg(text, ok){
+  const el = document.getElementById("liMsg");
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+async function doLogin(){
+  showAuthMsg("", false);
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: document.getElementById("liEmail").value.trim(),
+    password: document.getElementById("liPass").value,
+  });
+  if (error){ showAuthMsg("Gagal masuk: " + error.message, false); return; }
+  showAuthMsg("Login berhasil!", true);
+  enterApp();
+}
+
+async function doRegister(){
+  showAuthMsg("", false);
+  const email = document.getElementById("liEmail").value.trim();
+  const pass = document.getElementById("liPass").value;
+  if (!email || pass.length < 8){ showAuthMsg("Isi email dan password minimal 8 karakter.", false); return; }
+  const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { nama: email.split("@")[0] } } });
+  if (error){ showAuthMsg("Gagal daftar: " + error.message, false); return; }
+  if (data.session){ showAuthMsg("Daftar berhasil, langsung masuk!", true); enterApp(); }
+  else showAuthMsg("Daftar berhasil. Cek email konfirmasi lalu masuk.", true);
+}
+
+async function doLogout(){
+  await sb.auth.signOut();
+  location.reload();
+}
+
+function enterApp(){
+  document.getElementById("authArea").classList.add("hidden");
+  document.getElementById("appArea").classList.remove("hidden");
+  document.getElementById("btnOut").style.display = "inline-block";
+  loadProfileAndSettings();
+  loadHistory();
+}
+
+function fmtPct(v){ return v == null ? "—" : v + "%"; }
+function showTab(t){
+  document.getElementById("tabPengaturan").classList.toggle("on", t === "pengaturan");
+  document.getElementById("tabRiwayat").classList.toggle("on", t === "riwayat");
+  document.getElementById("panePengaturan").classList.toggle("hidden", t !== "pengaturan");
+  document.getElementById("paneRiwayat").classList.toggle("hidden", t !== "riwayat");
+}
+
+async function loadProfileAndSettings(){
+  const { data: session } = await sb.auth.getSession();
+  const uid = session.session.user.id;
+  let { data: prof, error: e1 } = await sb.from("users_profile").select("*").eq("auth_id", uid).maybeSingle();
+  if (e1){ document.getElementById("setMsg").textContent = "Gagal baca profil: " + e1.message; return; }
+  if (!prof){
+    const me = session.session.user;
+    const { data: created, error: e2 } = await sb.from("users_profile")
+      .insert({ auth_id: uid, email: me.email, nama: (me.user_metadata && me.user_metadata.nama) || me.email.split("@")[0], no_hp: "" })
+      .select().single();
+    if (e2){ document.getElementById("setMsg").textContent = "Gagal buat profil: " + e2.message; return; }
+    prof = created;
+  }
+  profile = prof;
+  document.getElementById("who").textContent = prof.email;
+  document.getElementById("who").classList.remove("hidden");
+  document.getElementById("pNama").value = prof.nama || "";
+  document.getElementById("pHp").value = prof.no_hp || "";
+
+  const { data: st } = await sb.from("user_settings").select("*").eq("user_id", prof.id).maybeSingle();
+  if (!st){
+    await sb.from("user_settings").insert({
+      user_id: prof.id, api_key_encrypted: "", secret_key_encrypted: "",
+      mode_otomatis: false, koin_pilihan: [], margin_persen: 10, leverage: 10, tp_persen: null, sl_persen: null,
+    });
+  } else {
+    document.getElementById("sMode").checked = !!st.mode_otomatis;
+    document.getElementById("sCoins").value = (st.koin_pilihan || []).join(", ");
+    document.getElementById("sLev").value = st.leverage;
+    document.getElementById("sMargin").value = st.margin_persen;
+    document.getElementById("sTp").value = st.tp_persen ?? "";
+    document.getElementById("sSl").value = st.sl_persen ?? "";
+  }
+  syncModeLabel();
+}
+
+function syncModeLabel(){
+  const on = document.getElementById("sMode").checked;
+  document.getElementById("modeLabel").textContent = on ? "Otomatis (bot eksekusi)" : "Manual (hanya sinyal & riwayat)";
+}
+
+async function saveSettings(){
+  const msg = document.getElementById("setMsg");
+  msg.textContent = "Menyimpan..."; msg.className = "msg";
+  const nama = document.getElementById("pNama").value.trim();
+  const hp = document.getElementById("pHp").value.trim();
+  if (nama !== (profile.nama || "")) await sb.from("users_profile").update({ nama, no_hp: hp }).eq("id", profile.id);
+  const payload = {
+    user_id: profile.id,
+    mode_otomatis: document.getElementById("sMode").checked,
+    koin_pilihan: document.getElementById("sCoins").value.split(",").map(s => s.trim()).filter(Boolean),
+    leverage: Math.min(10, Math.max(5, parseInt(document.getElementById("sLev").value || "10", 10))),
+    margin_persen: Math.min(100, Math.max(1, parseFloat(document.getElementById("sMargin").value || "10"))),
+    tp_persen: document.getElementById("sTp").value === "" ? null : parseFloat(document.getElementById("sTp").value),
+    sl_persen: document.getElementById("sSl").value === "" ? null : parseFloat(document.getElementById("sSl").value),
+    updated_at: new Date().toISOString(),
+  };
+  const api = document.getElementById("sApi").value.trim();
+  if (api) payload.api_key_encrypted = api;
+  const sec = document.getElementById("sSec").value.trim();
+  if (sec) payload.secret_key_encrypted = sec;
+  const { error } = await sb.from("user_settings").upsert(payload, { onConflict: "user_id" });
+  if (error){ msg.textContent = "Gagal simpan: " + error.message; msg.className = "msg err"; return; }
+  document.getElementById("sApi").value = "";
+  document.getElementById("sSec").value = "";
+  msg.textContent = "Tersimpan. (API key plaintext otomatis dienkripsi oleh engine pada run berikutnya.)";
+  msg.className = "msg ok";
+}
+
+async function loadHistory(){
+  if (!profile) return;
+  const body = document.getElementById("histBody");
+  const { data, error } = await sb.from("trade_history").select("*").eq("user_id", profile.id).order("executed_at", { ascending: false }).limit(100);
+  if (error){ body.innerHTML = '<tr><td colspan="11" style="color:var(--red)">Error: ' + error.message + "</td></tr>"; return; }
+  if (!data || !data.length){ body.innerHTML = '<tr><td colspan="11" style="color:var(--mut)">Belum ada data trade untuk akun ini.</td></tr>"; return; }
+  body.innerHTML = "";
+  for (const t of data){
+    const dir = t.direction === "LONG" ? '<span class="up">LONG</span>' : '<span class="dn">SHORT</span>';
+    const pnl = t.pnl == null ? "—" : '<span class="' + (t.pnl >= 0 ? "up" : "dn") + '">'.concat(t.pnl > 0 ? "+" : "", t.pnl.toFixed(2), "</span>");
+    const status = t.status === "open" ? '<span class="up">OPEN</span>' : "simulated";
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + t.symbol + "</td><td>" + dir + "</td><td>" + t.entry_price + "</td><td>" + t.sl_price + "</td><td>" + t.tp_price + "</td><td>" + t.leverage + "x</td><td>" + (t.quantity ?? "") + "</td><td>" + pnl + "</td><td>" + status + "</td><td>" + new Date(t.executed_at).toLocaleString("id-ID") + "</td>";
+    const tdBtn = document.createElement("td");
+    const btn = document.createElement("button");
+    btn.className = "btn3d red mini";
+    btn.textContent = "Hapus";
+    btn.onclick = async () => {
+      if (!confirm("Hapus riwayat " + t.symbol + " ini?")) return;
+      const { error } = await sb.from("trade_history").delete().eq("id", t.id);
+      if (error) alert("Gagal hapus: " + error.message);
+      loadHistory();
+    };
+    tdBtn.appendChild(btn);
+    tr.appendChild(tdBtn);
+    body.appendChild(tr);
+  }
+}
+
+sb.auth.onAuthStateChange((_e, session) => { if (!session) location.reload(); });
+document.getElementById("sMode").addEventListener("change", syncModeLabel);
+boot();
+</script>
+</body>
+</html>

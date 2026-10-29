@@ -81,8 +81,8 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   `telegram_bot.build_alert_html`.
 - `vst/risk.compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, leverage=None, margin_pct=None)`
   → entry, SL, TP. Default (tanpa override user) mengikuti `config.RISK_MODE`
-  (`VST_RISK_MODE`, default `pct`): SL `SL_PCT_DEFAULT` 2,0% dan TP `TP_PCT_DEFAULT`
-  6,0% (`VST_SL_PCT`/`VST_TP_PCT`), plus **TP parsial** `TP1_PCT` 1,2% untuk
+  (`VST_RISK_MODE`, default `pct`): SL `SL_PCT_DEFAULT` 3,0% dan TP `TP_PCT_DEFAULT`
+  6,0% (`VST_SL_PCT`/`VST_TP_PCT`), plus **TP parsial** `TP1_PCT` 1,5% untuk
   `TP1_FRACTION` 70% posisi (`VST_TP1_PCT`/`VST_TP1_FRACTION`); TP1 aktif hanya bila
   `TP1_PCT < 0,9 × TP`. Mode `atr` = SL ATR×1.5 clamp 1–4,5%, TP ATR×4 clamp 3–12%.
   Override user (`sl_pct`/`tp_pct`) clamp 0.5–4,5% / 0.5–50%. `leverage` clamp
@@ -92,25 +92,27 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - TP parsial: order entry membawa SL penuh + TP akhir untuk sisa 30%; setelah entry
   `executor._place_partial_tp` memasang TAKE_PROFIT_MARKET reduceOnly 70% di TP1.
   Bila entry dengan TP parsial ditolak bursa → fallback entry SL saja + dua order TP
-  terpisah (aman dari dobel entry: dicek `open_positions` dulu). Karena 70%×1,2% >
-  30%×2%, trade yang menyentuh TP1 selalu berakhir positif walau sisa kena SL
+  terpisah (aman dari dobel entry: dicek `open_positions` dulu). Karena 70%×1,5% >
+  30%×3%, trade yang menyentuh TP1 selalu berakhir positif walau sisa kena SL
   (tidak perlu geser SL ke BE).
-- Strategi V5.0 H1 = 8 layer (semua wajib lolos): L1 close>EMA200, L2 harga ≤ swing
-  low 10 bar +2,0%, L3 RSI < 45 dan naik (mirror SHORT: >55 turun), L4 volume > SMA20,
-  L5 ADX>25, L6 EMA20 ≥ EMA50 (mode `med`, mirror SHORT; mode `fast_med` = plus
-  EMA7 ≥ EMA50), L7 tren harian koin
-  (close D1 > EMA50 D1 dan EMA50 D1 naik 3 hari; mirror SHORT), L8 tren harian BTC
-  searah (LONG butuh BTC D1 uptrend, SHORT butuh downtrend). Data D1 diambil
+- Strategi V5.0 H1 = **5 layer tampilan** (semua wajib lolos; isinya gabungan dari
+  8 kondisi): L1 Tren Arah (close>EMA200 DAN EMA20≥EMA50 toleransi 0,15%), L2 Pullback
+  swing 10 bar +2,0% (support/resistance), L3 Momentum RSI < 40 dan naik (mirror SHORT:
+  >60 turun), L4 Kualitas Pasar (volume > SMA20 DAN ADX>25), L5 Tren Harian koin+BTC
+  searah (close D1 > EMA50 D1 dan EMA50 D1 naik 3 hari; mirror SHORT). Ouput
+  `filters.evaluate` kini mengembalikan 5 `layers` ter-gabung, bukan 8. Data D1 diambil
   `fetch(symbol, "1d", 150)`, candle D1 terakhir dibuang (`closed_candles`), tren BTC
   di-cache sekali per scan. Stack penuh 7>10>20>50 **jangan** dipakai (bentrok entry
-  pullback).
-- Hasil backtest produksi (`vst/backtest.py`, 24–41 koin × ~6 bulan H1, filter
-  `prod` = 8 layer di atas): **SL 2,5%/TP 6% + TP1 1,2% (70%)** → 146–216 trade,
-  **~0,8–1,2 sinyal/hari**, winrate 77,8–81,5%, +0,40–0,59%/trade, total +80–87%,
-  streak loss maks 3. Varian ketat (RSI 40, ADX 20, SL 2%) → 0,8/hari, WR 76,9%,
-  PF 2,20. Varian ADX 25 + RSI 40 → 0,5/hari, WR 86%. Tanpa TP parsial winrate
-  hanya ~45% (TP 6% penuh). Tanpa alignment D1 winrate turun ke ~52%; jangan hapus
-  L7/L8. Watchlist owner = 40 koin kripto manual (hindari aset tokenized).
+  pullback); tren harian (L5) **jangan** dipisah/dihapus — tanpa alignment D1 winrate
+  turun drastis.
+- Hasil backtest produksi (`vst/backtest.py`, 41 koin × ~6 bulan H1, 8 kondisi =
+  5 layer tampilan di atas): **SL 3%/TP 6% + TP1 1,5% (70%)** → ~124 trade,
+  **~0,7 sinyal/hari**, winrate total 83%, rata-rata winrate bulanan ~84%,
+  +0,7–0,8%/trade, total +87–103%, streak loss maks 6. Winrate >80% TIDAK bisa dicapai
+  tiap bulan (bulan minim sinyal bisa 60–70%); yang realistis rata-rata bulanan >80%.
+  Menghapus kondisi tren harian / mengurangi jadi 5 kondisi beneran → winrate mentok
+  ~73–77% dan sinyal meledak 7/hari. Tanpa TP parsial winrate hanya ~45% (TP penuh).
+  Watchlist owner = 40 koin kripto manual (hindari aset tokenized).
 - `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
   volume 24h dari bursa pertama yang sukses; daftar bisa memuat aset tokenized
   (contoh `NCCOGOLD2USD`) — backtest hanya memvalidasi koin kripto, jadi set

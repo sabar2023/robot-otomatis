@@ -354,7 +354,7 @@ BASE_F = {
     "support_tol": 0.02,
     "lookback": 10,
     "rsi_mode": "rising",
-    "rsi_lo": 45, "rsi_hi": 55,
+    "rsi_lo": 40, "rsi_hi": 60,
     "adx_min": 25,
     "stack_mode": "med",
     "vol_mult": 1.0,
@@ -380,9 +380,9 @@ OLD_FILTER_SETS = [
 ]
 
 RISK_SETS = [
-    ("prod SL2.5/TP6 p1.2 f0.7", {"mode": "pct", "sl_pct": 2.5, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 168, "partial_pct": 1.2, "partial_frac": 0.7}),
-    ("prod SL2/TP6 p1.2 f0.7", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 168, "partial_pct": 1.2, "partial_frac": 0.7}),
-    ("SL2/TP6 full", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 168}),
+    ("prod SL3/TP6 p1.5 f0.7", {"mode": "pct", "sl_pct": 3.0, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 300, "partial_pct": 1.5, "partial_frac": 0.7}),
+    ("prod SL2.5/TP6 p1.2 f0.7", {"mode": "pct", "sl_pct": 2.5, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 300, "partial_pct": 1.2, "partial_frac": 0.7}),
+    ("SL3/TP6 full", {"mode": "pct", "sl_pct": 3.0, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 300}),
 ]
 
 

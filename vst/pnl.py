@@ -5,6 +5,7 @@ import requests
 
 import database
 import executor
+import reporting
 
 log = logging.getLogger("brandbisnis_vst")
 
@@ -14,7 +15,7 @@ def fetch_open_trades(user_id):
         return []
     try:
         resp = requests.get(
-            f"{database._url()}/rest/v1/trade_history?select=id,symbol,direction,executed_at&user_id=eq.{user_id}&status=eq.open&order=executed_at.desc&limit=50",
+            f"{database._url()}/rest/v1/trade_history?select=id,symbol,direction,executed_at,entry_price,sl_price,tp_price&user_id=eq.{user_id}&status=eq.open&order=executed_at.desc&limit=50",
             headers=database._headers(database._service_key()),
             timeout=15,
         )
@@ -105,6 +106,21 @@ def sync_closed_trades(user):
         close_trade(row["id"], pnl_val, closed_iso)
         closed_count += 1
         log.info("PnL close %s %s id=%s pnl=%s", row["symbol"], row["direction"], row["id"], pnl_val)
+        try:
+            reporting.send_trade_close(
+                {
+                    "symbol": row["symbol"],
+                    "direction": row["direction"].upper(),
+                    "entry_price": row.get("entry_price"),
+                    "sl_price": row.get("sl_price"),
+                    "tp_price": row.get("tp_price"),
+                    "pnl": pnl_val,
+                    "closed_at": closed_iso,
+                },
+                user,
+            )
+        except Exception as exc:
+            log.warning("Kirim notif close gagal: %s", str(exc).splitlines()[0][:120])
     return closed_count
 
 

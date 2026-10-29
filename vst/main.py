@@ -6,6 +6,7 @@ import time
 
 import config
 import database
+import reporting
 import executor
 import filters
 import market_data
@@ -182,6 +183,8 @@ def scan_once(live, only_email=None):
     closed = pnl.sync_all(users, live)
     if closed:
         log.info("PnL: %d trade dinyatakan tertutup.", closed)
+    if live:
+        reporting.send_due_reports(users)
     return len(users)
 
 

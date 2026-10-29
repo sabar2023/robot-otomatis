@@ -168,6 +168,10 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   dan posisi VST tidak pernah muncul di sana (host real pun tidak melihatnya).
   Artinya order engine **tidak akan pernah** tampil di APK selama memakai VST;
   satu-satunya pool yang sama antara API & APK adalah **USDT real**.
+- **Akun VST berjalan di hedge mode**: order penutup jangan kirim `reduceOnly`
+  (ditolak `109400 In the Hedge mode, the 'ReduceOnly' field can not be filled`);
+  pakai `positionSide` (LONG/SHORT) + side berlawanan. ccxt mengabaikan
+  `reduceOnly` pada order trigger TP, jadi TP1 parsial tetap aman.
 - **`fetch_position_history` BingX**: ccxt memetakan `pnl`/`last`/`closePrice`
   kosong. `vst/pnl.py` membaca raw `info`: `netProfit` (fallback `realisedProfit`),
   waktu tutup `updateTime`, harga tutup `avgClosePrice`.

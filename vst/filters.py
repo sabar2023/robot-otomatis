@@ -97,10 +97,17 @@ def _ema_stack(base):
     values = [float(ind.ema(base["close"], period).iloc[-1]) for period in config.EMA_STACK_PERIODS]
     tol = config.EMA_STACK_TOLERANCE_PCT / 100.0
     e7, e10, e20, e50 = values
-    bull = e7 >= e50 * (1.0 - tol) and e20 >= e50 * (1.0 - tol)
-    bear = e7 <= e50 * (1.0 + tol) and e20 <= e50 * (1.0 + tol)
-    detail = {"ema7": e7, "ema10": e10, "ema20": e20, "ema50": e50}
-    return bull, bear, detail
+    if config.EMA_STACK_MODE == "med":
+        bull = e20 >= e50 * (1.0 - tol)
+        bear = e20 <= e50 * (1.0 + tol)
+        name = "L6 EMA 20 vs 50"
+        detail = {"ema20": e20, "ema50": e50}
+    else:
+        bull = e7 >= e50 * (1.0 - tol) and e20 >= e50 * (1.0 - tol)
+        bear = e7 <= e50 * (1.0 + tol) and e20 <= e50 * (1.0 + tol)
+        name = "L6 EMA 7/10 vs 50"
+        detail = {"ema7": e7, "ema10": e10, "ema20": e20, "ema50": e50}
+    return bull, bear, name, detail
 
 
 def _long_layers(m):
@@ -146,11 +153,11 @@ def _short_layers(m):
 def evaluate(symbol, base, daily=None, btc_daily=None):
     m = _metrics(base)
     l7, l8, l7_short, l8_short = _trend_layers(daily, btc_daily)
-    bull_stack, bear_stack, stack_detail = _ema_stack(base)
+    bull_stack, bear_stack, stack_name, stack_detail = _ema_stack(base)
     long_layers = _long_layers(m)
     short_layers = _short_layers(m)
-    long_layers.append({"name": "L6 EMA 7/10 vs 50", "passed": bull_stack, "detail": dict(stack_detail)})
-    short_layers.append({"name": "L6 EMA 7/10 vs 50", "passed": bear_stack, "detail": dict(stack_detail)})
+    long_layers.append({"name": stack_name, "passed": bull_stack, "detail": dict(stack_detail)})
+    short_layers.append({"name": stack_name, "passed": bear_stack, "detail": dict(stack_detail)})
     long_layers.append(l7)
     long_layers.append(l8)
     short_layers.append(l7_short)

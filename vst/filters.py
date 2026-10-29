@@ -32,11 +32,65 @@ def _common_layers(m):
     tol = config.SUPPORT_TOLERANCE_PCT / 100.0
     l4 = {
         "name": "L4 Validasi Volume",
-        "passed": m["vol_now"] > m["vol_sma"],
+        "passed": m["vol_now"] > m["vol_sma"] * config.VOLUME_MULT,
         "detail": {"volume": m["vol_now"], "volume_sma20": m["vol_sma"]},
     }
     l5 = {"name": "L5 ADX Anti-Sideways", "passed": m["adx"] > config.ADX_MIN, "detail": {"adx": m["adx"]}}
     return l4, l5, tol
+
+
+def _daily_trend(df):
+    if df is None or len(df) < config.DAILY_TREND_PERIOD + config.DAILY_SLOPE_BARS + 1:
+        return None
+    close = float(df["close"].iloc[-1])
+    series = ind.ema(df["close"], config.DAILY_TREND_PERIOD)
+    now = float(series.iloc[-1])
+    then = float(series.iloc[-1 - config.DAILY_SLOPE_BARS])
+    return {
+        "bull": close > now and now > then,
+        "bear": close < now and now < then,
+        "close": close,
+        "ema50": now,
+        "ema50_then": then,
+    }
+
+
+def _trend_layers(daily, btc_daily):
+    d = _daily_trend(daily)
+    b = _daily_trend(btc_daily)
+    if d is None:
+        l7 = {"name": "L7 Tren Harian EMA-50", "passed": False, "detail": {"data": "tidak tersedia"}}
+    else:
+        l7 = {
+            "name": "L7 Tren Harian EMA-50",
+            "passed": d["bull"],
+            "detail": {"close_d1": d["close"], "ema50_d1": d["ema50"], "ema50_then": d["ema50_then"]},
+        }
+    if b is None:
+        l8 = {"name": "L8 Tren BTC Harian", "passed": False, "detail": {"data": "tidak tersedia"}}
+    else:
+        l8 = {
+            "name": "L8 Tren BTC Harian",
+            "passed": b["bull"],
+            "detail": {"btc_close_d1": b["close"], "btc_ema50_d1": b["ema50"], "btc_ema50_then": b["ema50_then"]},
+        }
+    if d is None:
+        l7_short = {"name": "L7 Tren Harian EMA-50", "passed": False, "detail": {"data": "tidak tersedia"}}
+    else:
+        l7_short = {
+            "name": "L7 Tren Harian EMA-50",
+            "passed": d["bear"],
+            "detail": {"close_d1": d["close"], "ema50_d1": d["ema50"], "ema50_then": d["ema50_then"]},
+        }
+    if b is None:
+        l8_short = {"name": "L8 Tren BTC Harian", "passed": False, "detail": {"data": "tidak tersedia"}}
+    else:
+        l8_short = {
+            "name": "L8 Tren BTC Harian",
+            "passed": b["bear"],
+            "detail": {"btc_close_d1": b["close"], "btc_ema50_d1": b["ema50"], "btc_ema50_then": b["ema50_then"]},
+        }
+    return l7, l8, l7_short, l8_short
 
 
 def _ema_stack(base):
@@ -89,13 +143,18 @@ def _short_layers(m):
     return [l1, l2, l3, l4, l5]
 
 
-def evaluate(symbol, base):
+def evaluate(symbol, base, daily=None, btc_daily=None):
     m = _metrics(base)
+    l7, l8, l7_short, l8_short = _trend_layers(daily, btc_daily)
     bull_stack, bear_stack, stack_detail = _ema_stack(base)
     long_layers = _long_layers(m)
     short_layers = _short_layers(m)
     long_layers.append({"name": "L6 EMA 7/10 vs 50", "passed": bull_stack, "detail": dict(stack_detail)})
     short_layers.append({"name": "L6 EMA 7/10 vs 50", "passed": bear_stack, "detail": dict(stack_detail)})
+    long_layers.append(l7)
+    long_layers.append(l8)
+    short_layers.append(l7_short)
+    short_layers.append(l8_short)
     long_pass = all(layer["passed"] for layer in long_layers)
     short_pass = all(layer["passed"] for layer in short_layers)
 

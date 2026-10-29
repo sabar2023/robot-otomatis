@@ -13,6 +13,20 @@ import indicators as ind
 
 SYMBOLS = [
     "BTC/USDT:USDT",
+    "TRX/USDT:USDT",
+    "DOT/USDT:USDT",
+    "LTC/USDT:USDT",
+    "BCH/USDT:USDT",
+    "SUI/USDT:USDT",
+    "APT/USDT:USDT",
+    "NEAR/USDT:USDT",
+    "FIL/USDT:USDT",
+    "ATOM/USDT:USDT",
+    "INJ/USDT:USDT",
+    "ARB/USDT:USDT",
+    "OP/USDT:USDT",
+    "SEI/USDT:USDT",
+    "TIA/USDT:USDT",
     "ETH/USDT:USDT",
     "SOL/USDT:USDT",
     "XRP/USDT:USDT",
@@ -24,7 +38,7 @@ SYMBOLS = [
     "ZEC/USDT:USDT",
 ]
 
-BARS = 3000
+BARS = 4500
 
 
 def clamp(value, lo, hi):
@@ -47,6 +61,27 @@ def fetch_candles(ex, symbol, bars):
         time.sleep(0.3)
     data = [rows[k] for k in sorted(rows)][-bars:]
     return pd.DataFrame(data, columns=["ts", "open", "high", "low", "close", "volume"])
+
+
+def daily_trend(h1):
+    d = h1.set_index(pd.to_datetime(h1["ts"], unit="ms"))
+    dd = d.resample("1D").agg({"close": "last"}).dropna()
+    dd["e50"] = ind.ema(dd["close"], 50)
+    dd["up"] = (dd["close"] > dd["e50"]) & (dd["e50"] > dd["e50"].shift(3))
+    dd["dn"] = (dd["close"] < dd["e50"]) & (dd["e50"] < dd["e50"].shift(3))
+    out = dd[["up", "dn"]].reset_index()
+    out.columns = ["dt", "up", "dn"]
+    return out
+
+
+def attach_trend(h1, btc_trend):
+    d = h1.copy()
+    d["dt"] = pd.to_datetime(d["ts"], unit="ms")
+    own = daily_trend(h1)
+    d = pd.merge_asof(d.sort_values("dt"), own.sort_values("dt"), on="dt", direction="backward")
+    btc = btc_trend.rename(columns={"up": "btc_up", "dn": "btc_dn"})
+    d = pd.merge_asof(d.sort_values("dt"), btc.sort_values("dt"), on="dt", direction="backward")
+    return d.sort_values("dt").reset_index(drop=True)
 
 
 def build_frame(df, use_stack):
@@ -91,6 +126,22 @@ def build_frame(df, use_stack):
         spread = (f[["e7", "e10", "e20", "e50"]].max(axis=1) / f[["e7", "e10", "e20", "e50"]].min(axis=1) - 1.0) * 100.0
         f["conv_long"] = (spread <= 0.6) & (f["close"] > f["e50"])
         f["conv_short"] = (spread <= 0.6) & (f["close"] < f["e50"])
+        up_move = f["high"].diff()
+        down_move = -f["low"].diff()
+        plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+        minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+        tr = ind.true_range(f)
+        atr_s = tr.ewm(alpha=1.0 / 14, adjust=False).mean()
+        f["plus_di"] = 100.0 * plus_dm.ewm(alpha=1.0 / 14, adjust=False).mean() / atr_s
+        f["minus_di"] = 100.0 * minus_dm.ewm(alpha=1.0 / 14, adjust=False).mean() / atr_s
+        f["e50_slope_up"] = f["e50"] > f["e50"].shift(3)
+        f["e50_slope_dn"] = f["e50"] < f["e50"].shift(3)
+        cross50_up = (f["e7"] > f["e50"]) & (f["e7"].shift(1) <= f["e50"].shift(1))
+        cross50_dn = (f["e7"] < f["e50"]) & (f["e7"].shift(1) >= f["e50"].shift(1))
+        f["x50_up3"] = cross50_up.rolling(3).max().fillna(0).astype(bool) & (f["e7"] > f["e50"])
+        f["x50_up5"] = cross50_up.rolling(5).max().fillna(0).astype(bool) & (f["e7"] > f["e50"])
+        f["x50_dn3"] = cross50_dn.rolling(3).max().fillna(0).astype(bool) & (f["e7"] < f["e50"])
+        f["x50_dn5"] = cross50_dn.rolling(5).max().fillna(0).astype(bool) & (f["e7"] < f["e50"])
     return f
 
 
@@ -125,6 +176,16 @@ def signals(f, cfg):
         & (f["volume"] > f["vol_sma"] * cfg.get("vol_mult", 1.0))
         & (f["adx"] > cfg.get("adx_min", 20))
     )
+    if cfg.get("use_di"):
+        long_ok = long_ok & (f["plus_di"] > f["minus_di"])
+        short_ok = short_ok & (f["minus_di"] > f["plus_di"])
+    if cfg.get("use_slope"):
+        long_ok = long_ok & f["e50_slope_up"]
+        short_ok = short_ok & f["e50_slope_dn"]
+    if cfg.get("x50_window"):
+        w = cfg["x50_window"]
+        long_ok = long_ok & (f["x50_up3"] if w == 3 else f["x50_up5"])
+        short_ok = short_ok & (f["x50_dn3"] if w == 3 else f["x50_dn5"])
     mode = cfg.get("stack_mode", "strict")
     if mode == "strict":
         long_ok = long_ok & f["stack_long"]
@@ -288,7 +349,23 @@ def report(name, trades):
     )
 
 
+BASE_F = {
+    "support_tol": 0.015,
+    "lookback": 10,
+    "rsi_mode": "rising",
+    "rsi_lo": 40,
+    "adx_min": 20,
+    "stack_mode": "fast_med",
+    "vol_mult": 1.2,
+    "trend_align": True,
+}
+
 FILTER_SETS = [
+    ("prod", dict(BASE_F)),
+    ("prod-adx25", dict(BASE_F, adx_min=25)),
+]
+
+OLD_FILTER_SETS = [
     ("A-base", {"support_tol": 0.005, "lookback": 10, "rsi_mode": "rising", "rsi_lo": 40, "adx_min": 20, "stack_mode": "none"}),
     ("B-med", {"support_tol": 0.005, "lookback": 10, "rsi_mode": "rising", "rsi_lo": 40, "adx_min": 20, "stack_mode": "med"}),
     ("C-med-short", {"support_tol": 0.005, "lookback": 10, "rsi_mode": "rising", "rsi_lo": 40, "adx_min": 20, "stack_mode": "med_short"}),
@@ -302,19 +379,22 @@ FILTER_SETS = [
 ]
 
 RISK_SETS = [
-    ("SL1/TP3", {"mode": "pct", "sl_pct": 1.0, "tp_pct": 3.0, "sl_cap": 5.0, "max_bars": 48}),
-    ("ATR1.5/4-cap4.5", {"mode": "atr", "sl_mult": 1.5, "tp_mult": 4.0, "sl_cap": 4.5, "max_bars": 48}),
-    ("SL1/TP3-partial@1", {"mode": "pct", "sl_pct": 1.0, "tp_pct": 3.0, "sl_cap": 5.0, "max_bars": 48, "partial_pct": 1.0}),
+    ("SL2/TP2.5", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 2.5, "sl_cap": 5.0, "max_bars": 72}),
+    ("SL2/TP2", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 2.0, "sl_cap": 5.0, "max_bars": 72}),
+    ("SL2.5/TP3", {"mode": "pct", "sl_pct": 2.5, "tp_pct": 3.0, "sl_cap": 5.0, "max_bars": 72}),
+    ("SL2/TP5", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 5.0, "sl_cap": 5.0, "max_bars": 72}),
+    ("SL2.5/TP6", {"mode": "pct", "sl_pct": 2.5, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 72}),
 ]
 
 
 def main():
     ex = ccxt.bingx({"enableRateLimit": True, "timeout": 20000, "options": {"defaultType": "swap"}})
     frames = {}
+    btc_trend = daily_trend(fetch_candles(ex, "BTC/USDT:USDT", BARS))
     for symbol in SYMBOLS:
         try:
             df = fetch_candles(ex, symbol, BARS)
-            frames[symbol] = df
+            frames[symbol] = attach_trend(df, btc_trend)
         except Exception as exc:
             print(f"data {symbol} gagal: {str(exc).splitlines()[0][:100]}")
     print(f"data siap: {len(frames)} simbol x ~{BARS} candle H1")
@@ -325,6 +405,9 @@ def main():
             all_trades = []
             for symbol, f in prepared.items():
                 long_sig, short_sig = sig_cache[symbol]
+                if fcfg.get("trend_align"):
+                    long_sig = long_sig & f["up"].fillna(False).to_numpy() & f["btc_up"].fillna(False).to_numpy()
+                    short_sig = short_sig & f["dn"].fillna(False).to_numpy() & f["btc_dn"].fillna(False).to_numpy()
                 all_trades.extend(simulate(f, long_sig, short_sig, rcfg))
             all_trades.sort(key=lambda t: t["open_ts"])
             report(f"{fname} | {rname}", all_trades)

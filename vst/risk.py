@@ -9,11 +9,17 @@ def compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, 
     price = float(entry_price)
     atr = float(atr_value)
     if sl_pct is None:
-        sl_pct = _clamp(atr * config.ATR_SL_MULT / price * 100.0, config.SL_PCT_MIN, config.SL_PCT_MAX)
+        if config.RISK_MODE == "pct":
+            sl_pct = _clamp(config.SL_PCT_DEFAULT, config.SL_PCT_USER_MIN, config.SL_PCT_USER_MAX)
+        else:
+            sl_pct = _clamp(atr * config.ATR_SL_MULT / price * 100.0, config.SL_PCT_MIN, config.SL_PCT_MAX)
     else:
         sl_pct = _clamp(float(sl_pct), config.SL_PCT_USER_MIN, config.SL_PCT_USER_MAX)
     if tp_pct is None:
-        tp_pct = _clamp(atr * config.ATR_TP_MULT / price * 100.0, config.TP_PCT_MIN, config.TP_PCT_MAX)
+        if config.RISK_MODE == "pct":
+            tp_pct = _clamp(config.TP_PCT_DEFAULT, config.TP_PCT_USER_MIN, config.TP_PCT_USER_MAX)
+        else:
+            tp_pct = _clamp(atr * config.ATR_TP_MULT / price * 100.0, config.TP_PCT_MIN, config.TP_PCT_MAX)
     else:
         tp_pct = _clamp(float(tp_pct), config.TP_PCT_USER_MIN, config.TP_PCT_USER_MAX)
     if leverage:

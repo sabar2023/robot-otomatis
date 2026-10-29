@@ -72,7 +72,12 @@ def log_evaluation(symbol, result):
         log.info("    Dibatalkan: %s", ", ".join(result["failed_layers"]))
 
 
-def scan_symbol(live, fetch, user, symbol, auto_global):
+def _daily_frame(fetch, symbol):
+    raw, _src = fetch(symbol, "1d", config.DAILY_CANDLE_LIMIT)
+    return market_data.closed_candles(raw)
+
+
+def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None):
     now = dt.datetime.now(dt.timezone.utc)
     log.info("Memindai %s ...", symbol)
     raw, src = fetch(symbol, config.TIMEFRAME, config.CANDLE_LIMIT)
@@ -84,7 +89,21 @@ def scan_symbol(live, fetch, user, symbol, auto_global):
     age_minutes = (now - candle_close).total_seconds() / 60.0
     fresh = age_minutes <= config.FRESH_CANDLE_MAX_AGE_MINUTES
 
-    result = filters.evaluate(symbol, base)
+    daily_cache = daily_cache if daily_cache is not None else {}
+    try:
+        daily = _daily_frame(fetch, symbol)
+    except Exception as exc:
+        daily = None
+        log.warning("Data harian %s gagal: %s", symbol, _one_line(exc))
+    btc_daily = daily_cache.get("frame")
+    if btc_daily is None:
+        try:
+            btc_daily = _daily_frame(fetch, config.BTC_TREND_SYMBOL)
+            daily_cache["frame"] = btc_daily
+        except Exception as exc:
+            btc_daily = None
+            log.warning("Data harian %s gagal: %s", config.BTC_TREND_SYMBOL, _one_line(exc))
+    result = filters.evaluate(symbol, base, daily, btc_daily)
     log_evaluation(symbol, result)
     database.log_scan(symbol, "live" if live else "dry-run", result, src)
 
@@ -144,6 +163,7 @@ def scan_once(live, only_email=None):
 
     auto_global = database.auto_enabled()
     watch_cache = {}
+    daily_cache = {}
     for user in users:
         log.info("=== User: %s (%s) | otomatis: %s ===", user["nama"], user["email"], user["mode_otomatis"])
         if user["coins"]:
@@ -156,7 +176,7 @@ def scan_once(live, only_email=None):
             coins = watch_cache["default"]
         for symbol in coins:
             try:
-                scan_symbol(live, fetch, user, symbol, auto_global)
+                scan_symbol(live, fetch, user, symbol, auto_global, daily_cache)
             except Exception as exc:
                 log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
     closed = pnl.sync_all(users, live)
@@ -204,13 +224,16 @@ def main():
         mode_label = "LIVE REAL"
     log.info("=== %s | %s | mode: %s | lingkungan: %s ===", config.PRODUCT_NAME, config.TIMEFRAME_LABEL, mode_label, env_label)
     log.info(
-        "Scan tiap %d menit | leverage %d-%dx | margin maksimal %g%%/order | SL/TP default ATR x%.1f/x%.1f",
+        "Scan tiap %d menit | leverage %d-%dx | margin maksimal %g%%/order | default SL/TP %s",
         config.SCAN_INTERVAL_MINUTES,
         config.LEVERAGE_MIN,
         config.LEVERAGE_MAX,
         config.MARGIN_PCT,
-        config.ATR_SL_MULT,
-        config.ATR_TP_MULT,
+        (
+            f"{config.SL_PCT_DEFAULT:.1f}%/{config.TP_PCT_DEFAULT:.1f}%"
+            if config.RISK_MODE == "pct"
+            else f"ATR x{config.ATR_SL_MULT:.1f}/x{config.ATR_TP_MULT:.1f}"
+        ),
     )
 
     if args.test_telegram:

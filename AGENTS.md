@@ -80,19 +80,30 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   (artinya: BTC jauh di atas EMA200) — sengaja reuse untuk berbagi kode
   `telegram_bot.build_alert_html`.
 - `vst/risk.compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, leverage=None, margin_pct=None)`
-  → entry, SL, TP. Default (tanpa override user) = **ATR dinamis**: SL = ATR×1.5 clamp
-  1–4,5%, TP = ATR×4 clamp 3–12%. Override user (`sl_pct`/`tp_pct`) clamp 0.5–4,5% /
-  0.5–50%. `leverage` clamp 5–10x (default 10). `margin_pct` = porsi saldo per order
+  → entry, SL, TP. Default (tanpa override user) mengikuti `config.RISK_MODE`
+  (`VST_RISK_MODE`, default `pct`): SL `SL_PCT_DEFAULT` 2,0% dan TP `TP_PCT_DEFAULT`
+  2,5% (`VST_SL_PCT`/`VST_TP_PCT`). Mode `atr` = SL ATR×1.5 clamp 1–4,5%, TP ATR×4
+  clamp 3–12%. Override user (`sl_pct`/`tp_pct`) clamp 0.5–4,5% / 0.5–50%.
+  `leverage` clamp 5–10x (default 10). `margin_pct` = porsi saldo per order
   (default 10%). Return: `entry, stop_loss, take_profit, rr, atr, sl_distance_pct,
   tp_distance_pct, margin_pct, leverage`.
-- Strategi V5.0 H1 = 6 layer (semua wajib lolos): L1 close>EMA200, L2 harga ≤ swing
-  low 10 bar +0,5%, L3 RSI < 40 dan naik (mirror SHORT), L4 volume > SMA20, L5 ADX>20,
-  L6 verifikasi EMA: EMA7 ≥ EMA50 dan EMA20 ≥ EMA50 (mirror SHORT). Stack penuh
-  7>10>20>50 **jangan** dipakai: backtest `vst/backtest.py` (10 koin × ~125 hari H1)
-  menunjukkan 0–1 trade (bertentangan dengan entry pullback) sedangkan L6 versi
-  7/20 vs 50 = 4 trade, winrate 75%, rata-rata +2,0%/trade.
+- Strategi V5.0 H1 = 8 layer (semua wajib lolos): L1 close>EMA200, L2 harga ≤ swing
+  low 10 bar +1,5%, L3 RSI < 40 dan naik (mirror SHORT), L4 volume > 1,2× SMA20,
+  L5 ADX>20, L6 EMA7 ≥ EMA50 & EMA20 ≥ EMA50 (mirror SHORT), L7 tren harian koin
+  (close D1 > EMA50 D1 dan EMA50 D1 naik 3 hari; mirror SHORT), L8 tren harian BTC
+  searah (LONG butuh BTC D1 uptrend, SHORT butuh downtrend). Data D1 diambil
+  `fetch(symbol, "1d", 150)`, candle D1 terakhir dibuang (`closed_candles`), tren BTC
+  di-cache sekali per scan. Stack penuh 7>10>20>50 **jangan** dipakai (bentrok entry
+  pullback).
+- Hasil backtest produksi (`vst/backtest.py`, 23–38 koin × ~6 bulan H1, filter
+  `prod` = 8 layer di atas): SL 2%/TP 2,5% → 14 trade, **winrate 78,6%**,
+  +1,54%/trade, total +21,5%, streak loss maks 1. SL 2,5%/TP 3% → 78,6%,
+  +1,82%/trade. Dengan `ADX>25` sinyal menyusut ke 6 trade (100%, sampel kecil).
+  Tanpa alignment D1 winrate turun ke ~52%; jangan hapus L7/L8.
 - `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
-  volume 24h dari bursa pertama yang sukses.
+  volume 24h dari bursa pertama yang sukses; daftar bisa memuat aset tokenized
+  (contoh `NCCOGOLD2USD`) — backtest hanya memvalidasi koin kripto, jadi set
+  `koin_pilihan` manual bila ingin menghindari instrumen non-kripto.
 - `vst/pnl.sync_all(users, live)`: tiap run, baris `trade_history`
   `status=open` dicocokkan `fetch_position_history` BingX per simbol
   (wajib `params={"until": now_ms}` — API BingX menolak tanpa `endTs`);

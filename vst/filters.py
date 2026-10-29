@@ -39,6 +39,16 @@ def _common_layers(m):
     return l4, l5, tol
 
 
+def _ema_stack(base):
+    values = [float(ind.ema(base["close"], period).iloc[-1]) for period in config.EMA_STACK_PERIODS]
+    tol = config.EMA_STACK_TOLERANCE_PCT / 100.0
+    e7, e10, e20, e50 = values
+    bull = e7 >= e50 * (1.0 - tol) and e20 >= e50 * (1.0 - tol)
+    bear = e7 <= e50 * (1.0 + tol) and e20 <= e50 * (1.0 + tol)
+    detail = {"ema7": e7, "ema10": e10, "ema20": e20, "ema50": e50}
+    return bull, bear, detail
+
+
 def _long_layers(m):
     l4, l5, tol = _common_layers(m)
     l1 = {
@@ -47,13 +57,13 @@ def _long_layers(m):
         "detail": {"close": m["close"], "ema200": m["ema200"]},
     }
     l2 = {
-        "name": "L2 Support Swing-20",
+        "name": f"L2 Support Swing-{config.SWING_LOOKBACK}",
         "passed": m["close"] <= m["swing_low"] * (1.0 + tol),
         "detail": {"close": m["close"], "swing_low": m["swing_low"]},
     }
     l3 = {
-        "name": "L3 RSI Bounce Oversold",
-        "passed": m["rsi_prev"] < config.RSI_OVERSOLD and m["rsi_now"] >= config.RSI_OVERSOLD,
+        "name": "L3 RSI Momentum Naik",
+        "passed": m["rsi_prev"] < config.RSI_ENTRY_LONG_LO and m["rsi_now"] > m["rsi_prev"],
         "detail": {"rsi": m["rsi_now"], "rsi_prev": m["rsi_prev"]},
     }
     return [l1, l2, l3, l4, l5]
@@ -67,13 +77,13 @@ def _short_layers(m):
         "detail": {"close": m["close"], "ema200": m["ema200"]},
     }
     l2 = {
-        "name": "L2 Resistance Swing-20",
+        "name": f"L2 Resistance Swing-{config.SWING_LOOKBACK}",
         "passed": m["close"] >= m["swing_high"] * (1.0 - tol),
         "detail": {"close": m["close"], "swing_high": m["swing_high"]},
     }
     l3 = {
-        "name": "L3 RSI Rejection Overbought",
-        "passed": m["rsi_prev"] > config.RSI_OVERBOUGHT and m["rsi_now"] <= config.RSI_OVERBOUGHT,
+        "name": "L3 RSI Momentum Turun",
+        "passed": m["rsi_prev"] > config.RSI_ENTRY_SHORT_HI and m["rsi_now"] < m["rsi_prev"],
         "detail": {"rsi": m["rsi_now"], "rsi_prev": m["rsi_prev"]},
     }
     return [l1, l2, l3, l4, l5]
@@ -81,8 +91,11 @@ def _short_layers(m):
 
 def evaluate(symbol, base):
     m = _metrics(base)
+    bull_stack, bear_stack, stack_detail = _ema_stack(base)
     long_layers = _long_layers(m)
     short_layers = _short_layers(m)
+    long_layers.append({"name": "L6 EMA 7/10 vs 50", "passed": bull_stack, "detail": dict(stack_detail)})
+    short_layers.append({"name": "L6 EMA 7/10 vs 50", "passed": bear_stack, "detail": dict(stack_detail)})
     long_pass = all(layer["passed"] for layer in long_layers)
     short_pass = all(layer["passed"] for layer in short_layers)
 

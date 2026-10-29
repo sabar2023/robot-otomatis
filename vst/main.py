@@ -89,7 +89,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global):
     database.log_scan(symbol, "live" if live else "dry-run", result, src)
 
     if not result["passed"]:
-        log.info("Tidak ada sinyal - 5 layer filter tidak tercapai.")
+        log.info("Tidak ada sinyal - %d layer filter tidak tercapai.", len(result["layers"]))
         return
     if not fresh:
         log.info(

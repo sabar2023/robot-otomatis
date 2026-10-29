@@ -81,10 +81,16 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   `telegram_bot.build_alert_html`.
 - `vst/risk.compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, leverage=None, margin_pct=None)`
   → entry, SL, TP. Default (tanpa override user) = **ATR dinamis**: SL = ATR×1.5 clamp
-  1–5%, TP = ATR×4 clamp 3–12%. Override user (`sl_pct`/`tp_pct`) clamp 0.5–20% /
+  1–4,5%, TP = ATR×4 clamp 3–12%. Override user (`sl_pct`/`tp_pct`) clamp 0.5–4,5% /
   0.5–50%. `leverage` clamp 5–10x (default 10). `margin_pct` = porsi saldo per order
   (default 10%). Return: `entry, stop_loss, take_profit, rr, atr, sl_distance_pct,
   tp_distance_pct, margin_pct, leverage`.
+- Strategi V5.0 H1 = 6 layer (semua wajib lolos): L1 close>EMA200, L2 harga ≤ swing
+  low 10 bar +0,5%, L3 RSI < 40 dan naik (mirror SHORT), L4 volume > SMA20, L5 ADX>20,
+  L6 verifikasi EMA: EMA7 ≥ EMA50 dan EMA20 ≥ EMA50 (mirror SHORT). Stack penuh
+  7>10>20>50 **jangan** dipakai: backtest `vst/backtest.py` (10 koin × ~125 hari H1)
+  menunjukkan 0–1 trade (bertentangan dengan entry pullback) sedangkan L6 versi
+  7/20 vs 50 = 4 trade, winrate 75%, rata-rata +2,0%/trade.
 - `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
   volume 24h dari bursa pertama yang sukses.
 - `vst/pnl.sync_all(users, live)`: tiap run, baris `trade_history`

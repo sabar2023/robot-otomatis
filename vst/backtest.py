@@ -267,6 +267,7 @@ def simulate(f, long_sig, short_sig, cfg):
             tp1 = price * (1 - cfg.get("partial_pct", 0) / 100.0)
             be = price * (1 - cfg.get("be_pct", 0) / 100.0)
         partial_done = False
+        partial_frac = cfg.get("partial_frac", 0.5)
         booked = 0.0
         exit_price = None
         exit_bar = None
@@ -284,7 +285,7 @@ def simulate(f, long_sig, short_sig, cfg):
             if cfg.get("partial_pct") and not partial_done:
                 reached = high[j] >= tp1 if direction == "LONG" else low[j] <= tp1
                 if reached:
-                    booked = 0.5 * abs(tp1 - price) / price * 100.0
+                    booked = partial_frac * abs(tp1 - price) / price * 100.0
                     partial_done = True
                     sl = price
                     if direction == "LONG":
@@ -309,7 +310,7 @@ def simulate(f, long_sig, short_sig, cfg):
         move = (exit_price - price) / price * 100.0
         if direction == "SHORT":
             move = -move
-        pnl = booked + move * (0.5 if partial_done else 1.0)
+        pnl = booked + move * ((1.0 - partial_frac) if partial_done else 1.0)
         trades.append(
             {
                 "dir": direction,
@@ -379,11 +380,10 @@ OLD_FILTER_SETS = [
 ]
 
 RISK_SETS = [
-    ("SL2/TP2.5", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 2.5, "sl_cap": 5.0, "max_bars": 72}),
-    ("SL2/TP2", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 2.0, "sl_cap": 5.0, "max_bars": 72}),
-    ("SL2.5/TP3", {"mode": "pct", "sl_pct": 2.5, "tp_pct": 3.0, "sl_cap": 5.0, "max_bars": 72}),
-    ("SL2/TP5", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 5.0, "sl_cap": 5.0, "max_bars": 72}),
-    ("SL2.5/TP6", {"mode": "pct", "sl_pct": 2.5, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 72}),
+    ("prod SL2/TP6 p1.2 f0.7", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 168, "partial_pct": 1.2, "partial_frac": 0.7}),
+    ("prod SL2/TP5 p1.2 f0.7", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 5.0, "sl_cap": 5.0, "max_bars": 168, "partial_pct": 1.2, "partial_frac": 0.7}),
+    ("prod SL2.5/TP6 p1.2 f0.7", {"mode": "pct", "sl_pct": 2.5, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 168, "partial_pct": 1.2, "partial_frac": 0.7}),
+    ("SL2/TP6 full", {"mode": "pct", "sl_pct": 2.0, "tp_pct": 6.0, "sl_cap": 5.0, "max_bars": 168}),
 ]
 
 

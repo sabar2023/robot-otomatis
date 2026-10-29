@@ -82,11 +82,19 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - `vst/risk.compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, leverage=None, margin_pct=None)`
   → entry, SL, TP. Default (tanpa override user) mengikuti `config.RISK_MODE`
   (`VST_RISK_MODE`, default `pct`): SL `SL_PCT_DEFAULT` 2,0% dan TP `TP_PCT_DEFAULT`
-  2,5% (`VST_SL_PCT`/`VST_TP_PCT`). Mode `atr` = SL ATR×1.5 clamp 1–4,5%, TP ATR×4
-  clamp 3–12%. Override user (`sl_pct`/`tp_pct`) clamp 0.5–4,5% / 0.5–50%.
-  `leverage` clamp 5–10x (default 10). `margin_pct` = porsi saldo per order
-  (default 10%). Return: `entry, stop_loss, take_profit, rr, atr, sl_distance_pct,
-  tp_distance_pct, margin_pct, leverage`.
+  6,0% (`VST_SL_PCT`/`VST_TP_PCT`), plus **TP parsial** `TP1_PCT` 1,2% untuk
+  `TP1_FRACTION` 70% posisi (`VST_TP1_PCT`/`VST_TP1_FRACTION`); TP1 aktif hanya bila
+  `TP1_PCT < 0,9 × TP`. Mode `atr` = SL ATR×1.5 clamp 1–4,5%, TP ATR×4 clamp 3–12%.
+  Override user (`sl_pct`/`tp_pct`) clamp 0.5–4,5% / 0.5–50%. `leverage` clamp
+  5–20x (default 10, `VST_LEVERAGE_MAX`; owner diset 15x). `margin_pct` = porsi
+  saldo per order (default 10%). Return: `entry, stop_loss, take_profit, rr, atr,
+  sl_distance_pct, tp_distance_pct, tp1, tp1_pct, tp1_fraction, margin_pct, leverage`.
+- TP parsial: order entry membawa SL penuh + TP akhir untuk sisa 30%; setelah entry
+  `executor._place_partial_tp` memasang TAKE_PROFIT_MARKET reduceOnly 70% di TP1.
+  Bila entry dengan TP parsial ditolak bursa → fallback entry SL saja + dua order TP
+  terpisah (aman dari dobel entry: dicek `open_positions` dulu). Karena 70%×1,2% >
+  30%×2%, trade yang menyentuh TP1 selalu berakhir positif walau sisa kena SL
+  (tidak perlu geser SL ke BE).
 - Strategi V5.0 H1 = 8 layer (semua wajib lolos): L1 close>EMA200, L2 harga ≤ swing
   low 10 bar +1,5%, L3 RSI < 40 dan naik (mirror SHORT), L4 volume > 1,2× SMA20,
   L5 ADX>20, L6 EMA7 ≥ EMA50 & EMA20 ≥ EMA50 (mirror SHORT), L7 tren harian koin
@@ -95,11 +103,12 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   `fetch(symbol, "1d", 150)`, candle D1 terakhir dibuang (`closed_candles`), tren BTC
   di-cache sekali per scan. Stack penuh 7>10>20>50 **jangan** dipakai (bentrok entry
   pullback).
-- Hasil backtest produksi (`vst/backtest.py`, 23–38 koin × ~6 bulan H1, filter
-  `prod` = 8 layer di atas): SL 2%/TP 2,5% → 14 trade, **winrate 78,6%**,
-  +1,54%/trade, total +21,5%, streak loss maks 1. SL 2,5%/TP 3% → 78,6%,
-  +1,82%/trade. Dengan `ADX>25` sinyal menyusut ke 6 trade (100%, sampel kecil).
-  Tanpa alignment D1 winrate turun ke ~52%; jangan hapus L7/L8.
+- Hasil backtest produksi (`vst/backtest.py`, 23–41 koin × ~6 bulan H1, filter
+  `prod` = 8 layer di atas): **SL 2%/TP 6% + TP1 1,2% (70%)** → 14–18 trade,
+  **winrate 83–86%**, +0,82–0,97%/trade, streak loss maks 1, total +11–17%.
+  Tanpa TP parsial (TP 6% penuh) winrate hanya 50–61% walau avg/trade lebih besar
+  (+2,0%/trade). Tanpa alignment D1 winrate turun ke ~52%; jangan hapus L7/L8.
+  Trade dengan TP 5%/SL 2% setara hasilnya (WR 85,7%).
 - `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
   volume 24h dari bursa pertama yang sukses; daftar bisa memuat aset tokenized
   (contoh `NCCOGOLD2USD`) — backtest hanya memvalidasi koin kripto, jadi set
@@ -107,7 +116,9 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - `vst/pnl.sync_all(users, live)`: tiap run, baris `trade_history`
   `status=open` dicocokkan `fetch_position_history` BingX per simbol
   (wajib `params={"until": now_ms}` — API BingX menolak tanpa `endTs`);
-  posisi tertutup → PATCH `pnl`/`closed_at`, status `closed`.
+  **PnL dijumlahkan dari semua record penutupan** sejak entry (TP1 parsial +
+  penutupan akhir), bukan hanya record terakhir; posisi tertutup → PATCH
+  `pnl`/`closed_at`, status `closed`.
 - Notifikasi: sinyal selalu ke grup utama; bila `user_settings.tg_chat_id`
   terisi → juga ke chat user (`send_message(text, chat_id=None)`).
 - `app/` = aplikasi Flutter resmi (web+android), auth Supabase + RLS;

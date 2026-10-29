@@ -37,6 +37,12 @@ def compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, 
         take_profit = price * (1.0 - tp_pct / 100.0)
     sl_distance_pct = abs(stop_loss - price) / price * 100.0
     tp_distance_pct = abs(take_profit - price) / price * 100.0
+    tp1_pct = config.TP1_PCT if 0 < config.TP1_PCT < tp_pct * 0.9 else 0.0
+    tp1_fraction = min(1.0, max(0.0, config.TP1_FRACTION)) if tp1_pct > 0 else 0.0
+    if direction == "LONG":
+        first_target = price * (1.0 + tp1_pct / 100.0)
+    else:
+        first_target = price * (1.0 - tp1_pct / 100.0)
     return {
         "direction": direction,
         "entry": price,
@@ -46,6 +52,9 @@ def compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, 
         "atr": atr,
         "sl_distance_pct": sl_distance_pct,
         "tp_distance_pct": tp_distance_pct,
+        "tp1": first_target,
+        "tp1_pct": tp1_pct,
+        "tp1_fraction": tp1_fraction,
         "margin_pct": mg,
         "leverage": lev,
     }

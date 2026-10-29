@@ -111,7 +111,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "user_id": pid,
         "mode_otomatis": _mode,
         "koin_pilihan": _coins.text.split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
-        "leverage": _clampInt(_lev.text, 5, 10, 10),
+        "leverage": _clampInt(_lev.text, 5, 20, 10),
         "margin_persen": _clampDouble(_margin.text, 1, 100, 10),
         "tp_persen": _tp.text.trim().isEmpty ? null : double.parse(_tp.text.trim()),
         "sl_persen": _sl.text.trim().isEmpty ? null : double.parse(_sl.text.trim()),

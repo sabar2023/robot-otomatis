@@ -79,20 +79,64 @@ def compute_size(exchange, symbol, entry, levels):
     return amount, margin_used, notional
 
 
+def split_partial(exchange, symbol, levels, amount):
+    fraction = levels.get("tp1_fraction") or 0.0
+    if fraction <= 0 or not levels.get("tp1"):
+        return 0.0, amount
+    partial = float(exchange.amount_to_precision(symbol, amount * fraction))
+    remainder = float(exchange.amount_to_precision(symbol, amount - partial))
+    if partial <= 0 or remainder <= 0:
+        return 0.0, amount
+    return partial, remainder
+
+
 def prepare_order(exchange, symbol, levels, amount):
     side = "buy" if levels["direction"] == "LONG" else "sell"
+    _partial, remainder = split_partial(exchange, symbol, levels, amount)
     params = {
         "marginCoin": config.MARGIN_COIN,
         "stopLoss": {
             "triggerPrice": float(exchange.price_to_precision(symbol, levels["stop_loss"])),
             "type": "STOP_MARKET",
+            "quantity": amount,
         },
         "takeProfit": {
             "triggerPrice": float(exchange.price_to_precision(symbol, levels["take_profit"])),
             "type": "TAKE_PROFIT_MARKET",
+            "quantity": remainder,
         },
     }
     return side, params
+
+
+def _place_tp_order(exchange, symbol, direction, amount, trigger_price):
+    if amount <= 0:
+        return None
+    close_side = "sell" if direction == "LONG" else "buy"
+    trigger = float(exchange.price_to_precision(symbol, trigger_price))
+    base = {"takeProfitPrice": trigger, "reduceOnly": True, "marginCoin": config.MARGIN_COIN}
+    attempts = [
+        dict(base, positionSide=direction),
+        dict(base, hedged=True),
+        dict(base),
+    ]
+    last_error = None
+    for params in attempts:
+        try:
+            order = exchange.create_order(symbol, "TAKE_PROFIT_MARKET", close_side, amount, None, params=params)
+            log.info("TP %.6g qty %.8g terpasang (id %s).", trigger, amount, order.get("id"))
+            return order
+        except Exception as exc:
+            last_error = exc
+    log.warning("TP %.6g gagal dipasang: %s", trigger, str(last_error).splitlines()[0][:150])
+    return None
+
+
+def _place_partial_tp(exchange, symbol, levels, amount):
+    partial, _remainder = split_partial(exchange, symbol, levels, amount)
+    if partial <= 0:
+        return None
+    return _place_tp_order(exchange, symbol, levels["direction"], partial, levels["tp1"])
 
 
 def _public_exchange_with_markets(preferred_id):
@@ -155,6 +199,34 @@ def _place_entry_order(exchange, symbol, side, amount, params):
     raise last_error
 
 
+def _place_entry_order_fallback(exchange, symbol, side, amount, params, levels):
+    slim = {k: v for k, v in params.items() if k != "takeProfit"}
+    order = None
+    last_error = None
+    for hedged in (True, False):
+        attempt = dict(slim)
+        if hedged:
+            attempt["hedged"] = True
+        try:
+            order = exchange.create_order(symbol, "market", side, amount, None, params=attempt)
+            break
+        except Exception as exc:
+            last_error = exc
+            text = str(exc).lower()
+            if "positionside" not in text and "hedge" not in text:
+                break
+    if order is None:
+        raise last_error
+    _remainder, _ = split_partial(exchange, symbol, levels, amount)
+    tp2 = _place_tp_order(exchange, symbol, levels["direction"], _remainder, levels["take_profit"])
+    tp1 = _place_partial_tp(exchange, symbol, levels, amount)
+    if tp2 is None:
+        log.warning("TP akhir fallback gagal - posisi hanya dilindungi SL.")
+    if tp1 is None:
+        log.warning("TP1 fallback gagal - posisi hanya dilindungi SL dan TP akhir.")
+    return order, tp1
+
+
 def execute(levels, live, data_source_id=None, symbol=None, credentials=None):
     symbol = symbol or config.SYMBOL
     if not live:
@@ -163,6 +235,7 @@ def execute(levels, live, data_source_id=None, symbol=None, credentials=None):
         margin_used = notional / levels["leverage"]
         amount = float(exchange.amount_to_precision(symbol, notional / levels["entry"]))
         side, _ = prepare_order(exchange, symbol, levels, amount)
+        partial, _ = split_partial(exchange, symbol, levels, amount)
         return {
             "mode": "dry-run",
             "executed": False,
@@ -171,7 +244,8 @@ def execute(levels, live, data_source_id=None, symbol=None, credentials=None):
             "order_id": None,
             "margin_used": margin_used,
             "notional": notional,
-            "detail": "Simulasi - tidak ada order dikirim ke bursa.",
+            "tp1_amount": partial,
+            "detail": f"Simulasi - tidak ada order dikirim (TP1 {levels['tp1_fraction']*100:.0f}% @ {levels['tp1_pct']:.1f}%, sisa ke TP {levels['tp_distance_pct']:.1f}%)." if partial else "Simulasi - tidak ada order dikirim ke bursa.",
         }
 
     if credentials:
@@ -196,8 +270,25 @@ def execute(levels, live, data_source_id=None, symbol=None, credentials=None):
     _set_isolated_margin(exchange, symbol)
     _apply_leverage(exchange, symbol, levels["leverage"])
     amount, margin_used, notional = compute_size(exchange, symbol, levels["entry"], levels)
+    partial, _ = split_partial(exchange, symbol, levels, amount)
     side, params = prepare_order(exchange, symbol, levels, amount)
-    order = _place_entry_order(exchange, symbol, side, amount, params)
+    tp1_order = None
+    fallback_used = False
+    try:
+        order = _place_entry_order(exchange, symbol, side, amount, params)
+    except Exception as exc:
+        log.warning("Entry dengan TP parsial ditolak (%s) - mencoba fallback.", str(exc).splitlines()[0][:150])
+        if open_positions(exchange, symbol):
+            raise
+        order, tp1_order = _place_entry_order_fallback(exchange, symbol, side, amount, params, levels)
+        fallback_used = True
+    if not fallback_used and partial > 0:
+        tp1_order = _place_partial_tp(exchange, symbol, levels, amount)
+    detail = f"Bracket order terisolasi terkirim, id {order.get('id')} (margin {margin_used:,.2f} {config.MARGIN_COIN})."
+    if partial > 0 and tp1_order is None:
+        detail += " TP parsial GAGAL - sisa posisi hanya dilindungi SL dan TP akhir."
+    elif tp1_order is not None:
+        detail += f" TP1 {levels['tp1_fraction']*100:.0f}% @ {levels['tp1_pct']:.1f}% (id {tp1_order.get('id')})."
     return {
         "mode": "live",
         "executed": True,
@@ -206,5 +297,7 @@ def execute(levels, live, data_source_id=None, symbol=None, credentials=None):
         "order_id": str(order.get("id")),
         "margin_used": margin_used,
         "notional": notional,
-        "detail": f"Bracket order terisolasi terkirim, id {order.get('id')} (margin {margin_used:,.2f} {config.MARGIN_COIN}).",
+        "tp1_amount": partial,
+        "tp1_order_id": str(tp1_order.get("id")) if tp1_order else None,
+        "detail": detail,
     }

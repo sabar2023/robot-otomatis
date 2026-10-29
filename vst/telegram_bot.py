@@ -36,6 +36,13 @@ def build_alert_html(result, levels, execution, user=None):
         f"&#128176; <b>LEVERAGE</b>: {levels['leverage']}x | <b>MARGIN</b>: {config.MARGIN_COIN} terisolasi"
     )
 
+    tp1_line = None
+    if levels.get("tp1") and levels.get("tp1_fraction"):
+        tp1_line = (
+            f"&#127919; <b>TP1 (partial)</b>: {fmt_price(levels['tp1'])} ({levels['tp1_pct']:.2f}% | "
+            f"{levels['tp1_fraction']*100:.0f}% posisi ditutup)"
+        )
+
     lines = [
         "&#128680; <b>BRANDBISNIS V5.0 ALERT</b> &#128680;",
         mode_line,
@@ -47,10 +54,11 @@ def build_alert_html(result, levels, execution, user=None):
         "",
         f"&#127919; <b>ENTRY</b>    : {fmt_price(levels['entry'])}",
         f"&#128721; <b>STOP LOSS</b>: {fmt_price(levels['stop_loss'])} ({levels['sl_distance_pct']:.2f}% dari entry)",
+        tp1_line,
         f"&#9989; <b>TAKE PROFIT</b>: {fmt_price(levels['take_profit'])} ({levels['tp_distance_pct']:.2f}% dari entry | RR 1:{levels['rr']:g})",
         size_line,
         "",
-        "&#128221; <b>5-Layer Check:</b>",
+        f"&#128221; <b>{len(result['layers'])}-Layer Check:</b>",
         *layer_lines,
         "",
         f"&#128228; <b>STATUS ORDER</b>: {execution['detail']}",

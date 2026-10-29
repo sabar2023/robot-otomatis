@@ -58,7 +58,9 @@ DAILY_CANDLE_LIMIT = 150
 
 RISK_MODE = os.getenv("VST_RISK_MODE", "pct").strip().lower()
 SL_PCT_DEFAULT = float(os.getenv("VST_SL_PCT", "2.0"))
-TP_PCT_DEFAULT = float(os.getenv("VST_TP_PCT", "2.5"))
+TP_PCT_DEFAULT = float(os.getenv("VST_TP_PCT", "6.0"))
+TP1_PCT = float(os.getenv("VST_TP1_PCT", "1.2"))
+TP1_FRACTION = float(os.getenv("VST_TP1_FRACTION", "0.7"))
 ATR_PERIOD = 14
 ATR_SL_MULT = float(os.getenv("ATR_SL_MULT", "1.5"))
 ATR_TP_MULT = float(os.getenv("ATR_TP_MULT", "4.0"))
@@ -72,7 +74,7 @@ TP_PCT_USER_MIN = 0.5
 TP_PCT_USER_MAX = 50.0
 
 LEVERAGE_MIN = 5
-LEVERAGE_MAX = 10
+LEVERAGE_MAX = int(os.getenv("VST_LEVERAGE_MAX", "20"))
 LEVERAGE_DEFAULT = 10
 EXEC_MODE = os.getenv("VST_EXEC_MODE", "demo").strip().lower()
 MARGIN_PCT = float(os.getenv("VST_MARGIN_PCT", "10"))

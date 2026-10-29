@@ -84,17 +84,23 @@ def sync_closed_trades(user):
         if not candidates:
             continue
         best = max(candidates, key=lambda c: c["ts"])
-        best_h = best["h"]
-        info = best_h.get("info") or {}
-        pnl_val = info.get("netProfit")
-        if pnl_val is None:
-            pnl_val = info.get("realisedProfit")
-        if pnl_val is None:
-            pnl_val = best_h.get("pnl")
-        try:
-            pnl_val = float(pnl_val) if pnl_val is not None else None
-        except (TypeError, ValueError):
-            pnl_val = None
+        total = 0.0
+        found = False
+        for cand in candidates:
+            info = cand["h"].get("info") or {}
+            value = info.get("netProfit")
+            if value is None:
+                value = info.get("realisedProfit")
+            if value is None:
+                value = cand["h"].get("pnl")
+            try:
+                number = float(value) if value is not None else None
+            except (TypeError, ValueError):
+                number = None
+            if number is not None:
+                total += number
+                found = True
+        pnl_val = total if found else None
         closed_iso = dt.datetime.fromtimestamp(best["ts"] / 1000, dt.timezone.utc).isoformat()
         close_trade(row["id"], pnl_val, closed_iso)
         closed_count += 1

@@ -355,7 +355,7 @@ BASE_F = {
     "lookback": 10,
     "rsi_mode": "rising",
     "rsi_lo": 40, "rsi_hi": 60,
-    "adx_min": 25,
+"adx_min": 20,
     "stack_mode": "med",
     "vol_mult": 1.0,
     "trend_align": True,

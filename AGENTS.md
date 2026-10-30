@@ -98,7 +98,7 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
 - Strategi V5.0 H1 = **5 layer tampilan** (semua wajib lolos; isinya gabungan dari
   8 kondisi): L1 Tren Arah (close>EMA200 DAN EMA20≥EMA50 toleransi 0,15%), L2 Pullback
   swing 10 bar +2,0% (support/resistance), L3 Momentum RSI < 40 dan naik (mirror SHORT:
-  >60 turun), L4 Kualitas Pasar (volume > SMA20 DAN ADX>25), L5 Tren Harian koin+BTC
+  >60 turun), L4 Kualitas Pasar (volume > SMA20 DAN ADX>20), L5 Tren Harian koin+BTC
   searah (close D1 > EMA50 D1 dan EMA50 D1 naik 3 hari; mirror SHORT). Ouput
   `filters.evaluate` kini mengembalikan 5 `layers` ter-gabung, bukan 8. Data D1 diambil
   `fetch(symbol, "1d", 150)`, candle D1 terakhir dibuang (`closed_candles`), tren BTC
@@ -112,6 +112,9 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   tiap bulan (bulan minim sinyal bisa 60–70%); yang realistis rata-rata bulanan >80%.
   Menghapus kondisi tren harian / mengurangi jadi 5 kondisi beneran → winrate mentok
   ~73–77% dan sinyal meledak 7/hari. Tanpa TP parsial winrate hanya ~45% (TP penuh).
+  Tuning frekuensi (ADX 25→20): ±1,2 sinyal/hari, WR 80%, tapi sinyal tetap
+  terdistribusi (hanya ±42% hari ada sinyal) — tidak mungkin "order tiap hari" sambil
+  tahan WR >80% karena L5 tren harian BTC memblokir semua koin saat BTC netral.
   Watchlist owner = 40 koin kripto manual (hindari aset tokenized).
 - `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
   volume 24h dari bursa pertama yang sukses; daftar bisa memuat aset tokenized
@@ -124,7 +127,11 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   penutupan akhir), bukan hanya record terakhir; posisi tertutup → PATCH
   `pnl`/`closed_at`, status `closed`.
 - Notifikasi: sinyal selalu ke grup utama; bila `user_settings.tg_chat_id`
-  terisi → juga ke chat user (`send_message(text, chat_id=None)`).
+  terisi → juga ke chat user (`send_message(text, chat_id=None)`). `vst/reporting.py`
+  kirim: notif per-transaksi saat close (label TP/SL + PnL), plus laporan otomatis
+  **harian** (jam 00:00 UTC, ringkasan 24 jam: sinyal/posisi terbuka/trade tutup/PnL),
+  **mingguan** (Senin) dan **bulanan** (tgl 1) — dipicu `reporting.send_due_reports`
+  di akhir `scan_once` bila `live`.
 - `app/` = aplikasi Flutter resmi (web+android), auth Supabase + RLS;
   `web/dashboard-test/` = prototipe HTML dashboard tes. APK via CI
   `app-apk.yml` (build jalan di Actions, bukan lokal).

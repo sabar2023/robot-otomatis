@@ -125,12 +125,64 @@ def send_period_report(users, label, days):
             pass
 
 
+def _fetch_rows(user_id, status=None, since=None):
+    cols = "id,symbol,direction,status"
+    url = f"{database._url()}/rest/v1/trade_history?select={cols}&user_id=eq.{user_id}"
+    if status:
+        url += f"&status=eq.{status}"
+    if since:
+        url += "&executed_at=gte." + since
+    url += "&limit=500"
+    try:
+        resp = requests.get(url, headers=database._headers(database._service_key()), timeout=20)
+        if resp.status_code == 200:
+            return resp.json()
+        return []
+    except Exception:
+        return []
+
+
+def daily_message(user, closed, stats, opens, entries):
+    lines = [
+        "&#128202; <b>RINGKASAN HARIAN (24 jam)</b>",
+        f"&#128100; User: {user.get('nama') or user.get('email')}",
+        f"&#128225; Sinyal entry: <b>{len(entries)}</b>",
+        f"&#128274; Posisi terbuka: <b>{len(opens)}</b>",
+        f"Trade ditutup: <b>{len(closed)}</b>",
+    ]
+    if stats:
+        lines.append(f"Win {stats['wins']} / Loss {stats['losses']} | Winrate {stats['winrate']:.0f}%")
+        lines.append(f"PnL: <b>{_fmt_money(stats['total'])} {_coin()}</b>")
+    else:
+        lines.append(f"PnL: <b>+0.00 {_coin()}</b>")
+    return "\n".join(lines)
+
+
+def send_daily_report(users):
+    now = dt.datetime.now(dt.timezone.utc)
+    since = (now - dt.timedelta(hours=24)).isoformat()
+    for user in users:
+        closed = _fetch_closed(user["id"], since=since)
+        stats = _aggregate(closed)
+        opens = _fetch_rows(user["id"], status="open")
+        entries = _fetch_rows(user["id"], since=since)
+        msg = daily_message(user, closed, stats, opens, entries)
+        try:
+            telegram_bot.send_message(msg)
+            user_chat = (user.get("tg_chat_id") or "").strip()
+            if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
+                telegram_bot.send_message(msg, chat_id=user_chat)
+        except Exception:
+            pass
+
+
 def send_due_reports(users):
     if not users:
         return
     now = dt.datetime.now(dt.timezone.utc)
     if now.hour != 0:
         return
+    send_daily_report(users)
     if now.weekday() == 0:
         send_period_report(users, "mingguan", 7)
     if now.day == 1:

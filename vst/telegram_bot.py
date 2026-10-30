@@ -32,8 +32,9 @@ def build_alert_html(result, levels, execution, user=None):
         user_line = f"&#128100; <b>USER</b>     : {user['email']}"
     notional = execution.get("notional")
     margin_used = execution.get("margin_used")
-    size_line = f"&#128176; <b>SIZE</b>     : {notional:,.0f} USDT notional | <b>MARGIN</b>: {margin_used:,.2f} {config.MARGIN_COIN} ({levels['margin_pct']:g}%) | <b>LEVERAGE</b>: {levels['leverage']}x" if notional else (
-        f"&#128176; <b>LEVERAGE</b>: {levels['leverage']}x | <b>MARGIN</b>: {config.MARGIN_COIN} terisolasi"
+    lev_line = f"&#128737; <b>LEVERAGE</b> : {levels['leverage']}x"
+    size_line = f"&#128176; <b>SIZE</b>     : {notional:,.0f} USDT notional | <b>MARGIN</b>: {margin_used:,.2f} {config.MARGIN_COIN} ({levels['margin_pct']:g}%)" if notional else (
+        f"&#128176; <b>MARGIN</b>   : {config.MARGIN_COIN} terisolasi"
     )
 
     tp1_line = None
@@ -56,6 +57,7 @@ def build_alert_html(result, levels, execution, user=None):
         f"&#128721; <b>STOP LOSS</b>: {fmt_price(levels['stop_loss'])} (<b>SL {levels['sl_distance_pct']:.2f}%</b>)",
         tp1_line,
         f"&#9989; <b>TAKE PROFIT</b>: {fmt_price(levels['take_profit'])} (<b>TP {levels['tp_distance_pct']:.2f}%</b> | RR 1:{levels['rr']:g})",
+        lev_line,
         size_line,
         "",
         f"&#128221; <b>{len(result['layers'])}-Layer Check:</b>",

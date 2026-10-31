@@ -10,12 +10,24 @@ import reporting
 log = logging.getLogger("brandbisnis_vst")
 
 
+def _open_side_map(exchange):
+    result = {}
+    try:
+        for p in exchange.fetch_positions():
+            if float(p.get("contracts") or 0) > 0:
+                result[p["symbol"]] = str(p.get("side") or "").lower()
+    except Exception as exc:
+        log.warning("fetch_positions saat sync PnL gagal: %s", str(exc).splitlines()[0][:120])
+        return None
+    return result
+
+
 def fetch_open_trades(user_id):
     if not database.is_configured() or not user_id:
         return []
     try:
         resp = requests.get(
-            f"{database._url()}/rest/v1/trade_history?select=id,symbol,direction,executed_at,entry_price,sl_price,tp_price&user_id=eq.{user_id}&status=eq.open&order=executed_at.desc&limit=50",
+            f"{database._url()}/rest/v1/trade_history?select=id,symbol,direction,executed_at,entry_price,sl_price,tp_price,quantity,margin_used,leverage&user_id=eq.{user_id}&status=eq.open&order=executed_at.desc&limit=50",
             headers=database._headers(database._service_key()),
             timeout=15,
         )
@@ -61,6 +73,9 @@ def sync_closed_trades(user):
     symbols = sorted({r["symbol"] for r in open_rows})
     now_ms = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
     since_ms = now_ms - 90 * 86400 * 1000
+    open_map = _open_side_map(exchange)
+    if open_map is None:
+        return 0
     for sym in symbols:
         try:
             hist = exchange.fetch_position_history(sym, since=since_ms, limit=100, params={"until": now_ms})
@@ -80,6 +95,8 @@ def sync_closed_trades(user):
 
     closed_count = 0
     for row in open_rows:
+        if open_map.get(row["symbol"]) == row["direction"].lower():
+            continue
         key = (row["symbol"], row["direction"].lower())
         candidates = [c for c in closed_map.get(key, []) if c["ts"] >= _exec_ms(row) - 60000]
         if not candidates:
@@ -114,6 +131,8 @@ def sync_closed_trades(user):
                     "entry_price": row.get("entry_price"),
                     "sl_price": row.get("sl_price"),
                     "tp_price": row.get("tp_price"),
+                    "margin_used": row.get("margin_used"),
+                    "leverage": row.get("leverage"),
                     "pnl": pnl_val,
                     "closed_at": closed_iso,
                 },

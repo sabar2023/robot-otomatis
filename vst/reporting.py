@@ -36,6 +36,38 @@ def _fmt_money(value):
     return f"{value:+,.2f}"
 
 
+def _fmt_price(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return "?"
+    if value >= 1000:
+        return f"{value:,.2f}"
+    return f"{value:.6g}"
+
+
+def _price_pct(entry, price):
+    try:
+        entry = float(entry)
+        price = float(price)
+    except (TypeError, ValueError):
+        return None
+    if entry <= 0:
+        return None
+    return (price - entry) / entry * 100.0
+
+
+def _roi_pct(pnl, margin):
+    try:
+        pnl = float(pnl)
+        margin = float(margin)
+    except (TypeError, ValueError):
+        return None
+    if margin <= 0:
+        return None
+    return pnl / margin * 100.0
+
+
 def trade_close_message(row):
     pnl = row.get("pnl")
     try:
@@ -46,12 +78,34 @@ def trade_close_message(row):
         return None
     hit = "TP" if pnl > 0 else "SL"
     emoji = "&#9989;" if pnl > 0 else "&#128308;"
+    entry = row.get("entry_price")
+    sl = row.get("sl_price")
+    tp = row.get("tp_price")
+    sl_pct = _price_pct(entry, sl)
+    tp_pct = _price_pct(entry, tp)
+    sl_txt = f"SL: {_fmt_price(sl)}"
+    if sl_pct is not None:
+        sl_txt += f" ({sl_pct:+.2f}%)"
+    tp_txt = f"TP: {_fmt_price(tp)}"
+    if tp_pct is not None:
+        tp_txt += f" ({tp_pct:+.2f}%)"
+    roi = _roi_pct(pnl, row.get("margin_used"))
+    pnl_txt = f"&#128176; PnL: <b>{_fmt_money(pnl)} {_coin()}</b>"
+    if roi is not None:
+        pnl_txt += f" (<b>{roi:+.2f}%</b> dari margin)"
     lines = [
         f"{emoji} <b>TRADE CLOSED [{hit}]</b>",
         f"&#128200; {row.get('symbol')} | {row.get('direction')}",
-        f"Entry: {row.get('entry_price')} | SL: {row.get('sl_price')} | TP: {row.get('tp_price')}",
-        f"&#128176; PnL: {_fmt_money(pnl)} {_coin()}",
+        f"Entry: {_fmt_price(entry)} | {sl_txt} | {tp_txt}",
     ]
+    margin_used = row.get("margin_used")
+    leverage = row.get("leverage")
+    if margin_used is not None:
+        info = f"Margin: {_fmt_price(margin_used)} {_coin()}"
+        if leverage is not None:
+            info += f" | Leverage: {leverage}x"
+        lines.append(info)
+    lines.append(pnl_txt)
     closed = row.get("closed_at")
     if closed:
         lines.append(f"Closing: {str(closed).replace('T', ' ')[:16]} UTC")

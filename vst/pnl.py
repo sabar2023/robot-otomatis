@@ -10,15 +10,19 @@ import reporting
 log = logging.getLogger("brandbisnis_vst")
 
 
-def _open_side_map(exchange):
+def _open_side_map(exchange, symbols):
     result = {}
-    try:
-        for p in exchange.fetch_positions():
+    for symbol in symbols:
+        try:
+            positions = exchange.fetch_positions([symbol])
+        except Exception as exc:
+            log.warning("fetch_positions %s saat sync PnL gagal: %s", symbol, str(exc).splitlines()[0][:120])
+            return None
+        for p in positions or []:
+            if p.get("symbol") != symbol:
+                continue
             if float(p.get("contracts") or 0) > 0:
-                result[p["symbol"]] = str(p.get("side") or "").lower()
-    except Exception as exc:
-        log.warning("fetch_positions saat sync PnL gagal: %s", str(exc).splitlines()[0][:120])
-        return None
+                result[symbol] = str(p.get("side") or "").lower()
     return result
 
 
@@ -73,7 +77,7 @@ def sync_closed_trades(user):
     symbols = sorted({r["symbol"] for r in open_rows})
     now_ms = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
     since_ms = now_ms - 90 * 86400 * 1000
-    open_map = _open_side_map(exchange)
+    open_map = _open_side_map(exchange, symbols)
     if open_map is None:
         return 0
     for sym in symbols:

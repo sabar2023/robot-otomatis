@@ -26,6 +26,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _tg = TextEditingController();
   bool _mode = false;
   bool _manual = false;
+  bool _marginDynamic = false;
   bool _loaded = false;
   bool _busy = false;
   String? _msg;
@@ -70,6 +71,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           "secret_key_encrypted": "",
           "mode_otomatis": false,
           "mode_manual": false,
+          "margin_mode": "fixed",
           "koin_pilihan": <String>[],
           "margin_persen": 10,
           "leverage": 5,
@@ -77,6 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } else {
         _mode = (st["mode_otomatis"] ?? false) as bool;
         _manual = (st["mode_manual"] ?? false) as bool;
+        _marginDynamic = (st["margin_mode"] ?? "fixed") == "pct";
         final coins = (st["koin_pilihan"] as List?) ?? const [];
         _coins.text = coins.map((e) => e.toString()).join(", ");
         _lev.text = (st["leverage"] ?? 5).toString();
@@ -114,6 +117,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "user_id": pid,
         "mode_otomatis": _mode,
         "mode_manual": _manual,
+        "margin_mode": _marginDynamic ? "pct" : "fixed",
         "koin_pilihan": _coins.text.split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
         "leverage": _clampInt(_lev.text, 5, 20, 5),
         "margin_persen": _clampDouble(_margin.text, 1, 100, 10),
@@ -231,6 +235,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text("Margin per Order", style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text(
+                _marginDynamic
+                    ? "Margin dihitung dinamis dari saldo terkini (compounding)."
+                    : "Margin tetap 10.000 VST per order (statis, tidak ikut naik).",
+                style: const TextStyle(color: textMuted, fontSize: 12.5),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text("Fixed 10.000"), icon: Icon(Icons.lock_outline)),
+                  ButtonSegment(value: true, label: Text("Dinamis %"), icon: Icon(Icons.trending_up)),
+                ],
+                selected: <bool>{_marginDynamic},
+                onSelectionChanged: (s) => setState(() => _marginDynamic = s.first),
+              ),
+              if (_marginDynamic) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _margin,
+                  keyboardType: TextInputType.number,
+                  decoration: appDecoration(label: "Margin (% saldo per order)"),
+                ),
+              ],
+            ],
+          ),
+        ),
+        panelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               const _SectionTitle("Profil"),
               const SizedBox(height: 12),
               TextField(controller: _nama, decoration: appDecoration(label: "Nama")),
@@ -252,24 +288,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _lev,
-                        keyboardType: TextInputType.number,
-                        decoration: appDecoration(label: "Leverage (5-20x)"),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _margin,
-                        keyboardType: TextInputType.number,
-                        decoration: appDecoration(label: "Margin (% saldo)"),
-                      ),
-                    ),
-                  ],
+                TextField(
+                  controller: _lev,
+                  keyboardType: TextInputType.number,
+                  decoration: appDecoration(label: "Leverage (5-20x)"),
                 ),
                 const SizedBox(height: 12),
                 Row(

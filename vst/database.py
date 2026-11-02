@@ -190,6 +190,7 @@ def fetch_users():
                     "mode_manual": bool(row.get("mode_manual")),
                     "coins": [s.strip() for s in (row.get("koin_pilihan") or []) if s and s.strip()],
                     "margin_pct": row.get("margin_persen"),
+                    "margin_mode": (row.get("margin_mode") or "fixed").strip().lower(),
                     "leverage": row.get("leverage"),
                     "tp_pct": row.get("tp_persen"),
                     "sl_pct": row.get("sl_persen"),

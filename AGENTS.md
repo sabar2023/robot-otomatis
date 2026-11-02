@@ -51,9 +51,12 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   Tabel mesin: `ro_scans` (scan per koin), `ro_executions` (per order/simulasi),
   `ro_config` (toggle `auto_trading`). Tabel SaaS V5.0: `users_profile`
   (id, email, nama, no_hp), `user_settings` (API key terenkripsi Fernet,
-  `mode_otomatis`, `mode_manual`, `koin_pilihan[]`, `margin_persen`, `leverage`,
-  `tp_persen`, `sl_persen`), `trade_history` (riwayat + PnL per user,
-  `status` open/simulated). `mode_manual=false` (default) = mode Otomatis:
+  `mode_otomatis`, `mode_manual`, `margin_mode`, `koin_pilihan[]`,
+  `margin_persen`, `leverage`, `tp_persen`, `sl_persen`), `trade_history`
+  (riwayat + PnL per user, `status` open/simulated). `margin_mode` `fixed`
+  (default) = margin per order tetap `VST_FIXED_MARGIN` (10.000 VST);
+  `margin_mode` `pct` = margin per order `margin_persen`% dari saldo bebas
+  terkini (compounding dinamis). `mode_manual=false` (default) = mode Otomatis:
   engine mengabaikan `koin_pilihan`/`leverage`/`margin_persen`/`tp_persen`/
   `sl_persen` dan memakai default (top-5 volume, leverage/SL/TP/margin dari
   `config`); `mode_manual=true` = mode Manual: semua nilai manual dipakai.

@@ -39,6 +39,7 @@ def owner_user():
         "api_key": config.BINGX_API_KEY,
         "secret_key": config.BINGX_SECRET_KEY,
         "mode_otomatis": True,
+        "mode_manual": False,
         "coins": [],
         "margin_pct": None,
         "leverage": None,
@@ -125,14 +126,15 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None):
     if live and not auto:
         log.info("Mode otomatis user / ro_config.auto_trading nonaktif - eksekusi live dilewati (simulasi).")
 
+    manual = bool(user.get("mode_manual"))
     levels = risk.compute_levels(
         result["direction"],
         result["price"],
         result["atr"],
-        sl_pct=user["sl_pct"],
-        tp_pct=user["tp_pct"],
-        leverage=user["leverage"],
-        margin_pct=user["margin_pct"],
+        sl_pct=user["sl_pct"] if manual else None,
+        tp_pct=user["tp_pct"] if manual else None,
+        leverage=user["leverage"] if manual else None,
+        margin_pct=user["margin_pct"] if manual else None,
     )
     credentials = {"api_key": user["api_key"], "secret_key": user["secret_key"]}
     execution = executor.execute(levels, live=execute_live, data_source_id=src, symbol=symbol, credentials=credentials)
@@ -166,8 +168,9 @@ def scan_once(live, only_email=None):
     watch_cache = {}
     daily_cache = {}
     for user in users:
-        log.info("=== User: %s (%s) | otomatis: %s ===", user["nama"], user["email"], user["mode_otomatis"])
-        if user["coins"]:
+        mode_label = "manual" if user.get("mode_manual") else "otomatis"
+        log.info("=== User: %s (%s) | otomatis: %s | mode: %s ===", user["nama"], user["email"], user["mode_otomatis"], mode_label)
+        if user.get("mode_manual") and user["coins"]:
             coins = user["coins"]
             log.info("Watchlist manual: %s", ", ".join(coins))
         else:

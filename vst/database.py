@@ -187,6 +187,7 @@ def fetch_users():
                     "api_key": api_key,
                     "secret_key": secret_key,
                     "mode_otomatis": bool(row.get("mode_otomatis")),
+                    "mode_manual": bool(row.get("mode_manual")),
                     "coins": [s.strip() for s in (row.get("koin_pilihan") or []) if s and s.strip()],
                     "margin_pct": row.get("margin_persen"),
                     "leverage": row.get("leverage"),

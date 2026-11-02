@@ -17,7 +17,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _nama = TextEditingController();
   final _hp = TextEditingController();
   final _coins = TextEditingController();
-  final _lev = TextEditingController(text: "10");
+  final _lev = TextEditingController(text: "5");
   final _margin = TextEditingController(text: "10");
   final _tp = TextEditingController();
   final _sl = TextEditingController();
@@ -25,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _sec = TextEditingController();
   final _tg = TextEditingController();
   bool _mode = false;
+  bool _manual = false;
   bool _loaded = false;
   bool _busy = false;
   String? _msg;
@@ -68,15 +69,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           "api_key_encrypted": "",
           "secret_key_encrypted": "",
           "mode_otomatis": false,
+          "mode_manual": false,
           "koin_pilihan": <String>[],
           "margin_persen": 10,
-          "leverage": 10,
+          "leverage": 5,
         });
       } else {
         _mode = (st["mode_otomatis"] ?? false) as bool;
+        _manual = (st["mode_manual"] ?? false) as bool;
         final coins = (st["koin_pilihan"] as List?) ?? const [];
         _coins.text = coins.map((e) => e.toString()).join(", ");
-        _lev.text = (st["leverage"] ?? 10).toString();
+        _lev.text = (st["leverage"] ?? 5).toString();
         _margin.text = (st["margin_persen"] ?? 10).toString();
         _tp.text = st["tp_persen"]?.toString() ?? "";
         _sl.text = st["sl_persen"]?.toString() ?? "";
@@ -110,8 +113,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final payload = <String, dynamic>{
         "user_id": pid,
         "mode_otomatis": _mode,
+        "mode_manual": _manual,
         "koin_pilihan": _coins.text.split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
-        "leverage": _clampInt(_lev.text, 5, 20, 10),
+        "leverage": _clampInt(_lev.text, 5, 20, 5),
         "margin_persen": _clampDouble(_margin.text, 1, 100, 10),
         "tp_persen": _tp.text.trim().isEmpty ? null : double.parse(_tp.text.trim()),
         "sl_persen": _sl.text.trim().isEmpty ? null : double.parse(_sl.text.trim()),
@@ -203,6 +207,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text("Mode Pengaturan", style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text(
+                _manual
+                    ? "Anda mengatur koin, leverage, margin, TP/SL sendiri."
+                    : "Bot memakai strategi default (top-5 volume, leverage & SL/TP standar).",
+                style: const TextStyle(color: textMuted, fontSize: 12.5),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text("Otomatis"), icon: Icon(Icons.smart_toy_outlined)),
+                  ButtonSegment(value: true, label: Text("Manual"), icon: Icon(Icons.tune)),
+                ],
+                selected: <bool>{_manual},
+                onSelectionChanged: (s) => setState(() => _manual = s.first),
+              ),
+            ],
+          ),
+        ),
+        panelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               const _SectionTitle("Profil"),
               const SizedBox(height: 12),
               TextField(controller: _nama, decoration: appDecoration(label: "Nama")),
@@ -213,56 +241,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: appDecoration(label: "No. HP"),
               ),
               const SizedBox(height: 16),
-              const _SectionTitle("Strategi"),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _coins,
-                decoration: appDecoration(
-                  label: "Koin pilihan (pisah koma)",
-                  hintText: "kosong = otomatis top-5 volume",
+              if (_manual) ...[
+                const _SectionTitle("Strategi"),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _coins,
+                  decoration: appDecoration(
+                    label: "Koin pilihan (pisah koma)",
+                    hintText: "kosong = otomatis top-5 volume",
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _lev,
-                      keyboardType: TextInputType.number,
-                      decoration: appDecoration(label: "Leverage (5-10x)"),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _lev,
+                        keyboardType: TextInputType.number,
+                        decoration: appDecoration(label: "Leverage (5-20x)"),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _margin,
-                      keyboardType: TextInputType.number,
-                      decoration: appDecoration(label: "Margin (% saldo)"),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _margin,
+                        keyboardType: TextInputType.number,
+                        decoration: appDecoration(label: "Margin (% saldo)"),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _tp,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: appDecoration(label: "TP % (kosong = ATR)"),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _tp,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: appDecoration(label: "TP % (kosong = ATR)"),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _sl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: appDecoration(label: "SL % (kosong = ATR)"),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _sl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: appDecoration(label: "SL % (kosong = ATR)"),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
               const _SectionTitle("Kredensial & Notifikasi"),
               const SizedBox(height: 12),
               TextField(

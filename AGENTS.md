@@ -51,8 +51,12 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   Tabel mesin: `ro_scans` (scan per koin), `ro_executions` (per order/simulasi),
   `ro_config` (toggle `auto_trading`). Tabel SaaS V5.0: `users_profile`
   (id, email, nama, no_hp), `user_settings` (API key terenkripsi Fernet,
-  `mode_otomatis`, `koin_pilihan[]`, `margin_persen`, `leverage`, `tp_persen`,
-  `sl_persen`), `trade_history` (riwayat + PnL per user, `status` open/simulated).
+  `mode_otomatis`, `mode_manual`, `koin_pilihan[]`, `margin_persen`, `leverage`,
+  `tp_persen`, `sl_persen`), `trade_history` (riwayat + PnL per user,
+  `status` open/simulated). `mode_manual=false` (default) = mode Otomatis:
+  engine mengabaikan `koin_pilihan`/`leverage`/`margin_persen`/`tp_persen`/
+  `sl_persen` dan memakai default (top-5 volume, leverage/SL/TP/margin dari
+  `config`); `mode_manual=true` = mode Manual: semua nilai manual dipakai.
   RLS aktif; engine baca/lintas-user pakai service key, user Flutter baca data
   sendiri via auth. User owner pertama sudah diseed (sabarberkah2017@gmail.com).
 

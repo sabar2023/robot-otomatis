@@ -76,7 +76,7 @@ TP_PCT_USER_MAX = 50.0
 
 LEVERAGE_MIN = 5
 LEVERAGE_MAX = int(os.getenv("VST_LEVERAGE_MAX", "20"))
-LEVERAGE_DEFAULT = 10
+LEVERAGE_DEFAULT = 5
 EXEC_MODE = os.getenv("VST_EXEC_MODE", "demo").strip().lower()
 MARGIN_PCT = float(os.getenv("VST_MARGIN_PCT", "10"))
 MARGIN_COIN = os.getenv("VST_MARGIN_COIN", "USDT" if EXEC_MODE == "real" else "VST")

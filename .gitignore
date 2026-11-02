@@ -4,6 +4,8 @@ dist/
 *.db-wal
 *.db-shm
 .env
+BACKUP_*.md
+BACKUP_*.json
 .wrangler/
 __pycache__/
 *.pyc

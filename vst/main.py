@@ -230,11 +230,15 @@ def main():
         mode_label = "LIVE REAL"
     log.info("=== %s | %s | mode: %s | lingkungan: %s ===", config.PRODUCT_NAME, config.TIMEFRAME_LABEL, mode_label, env_label)
     log.info(
-        "Scan tiap %d menit | leverage %d-%dx | margin maksimal %g%%/order | default SL/TP %s",
+        "Scan tiap %d menit | leverage %d-%dx | margin %s/order | default SL/TP %s",
         config.SCAN_INTERVAL_MINUTES,
         config.LEVERAGE_MIN,
         config.LEVERAGE_MAX,
-        config.MARGIN_PCT,
+        (
+            f"{config.FIXED_MARGIN:g} {config.MARGIN_COIN} (fixed)"
+            if config.FIXED_MARGIN > 0
+            else f"{config.MARGIN_PCT:.1f}%"
+        ),
         (
             f"{config.SL_PCT_DEFAULT:.1f}%/{config.TP_PCT_DEFAULT:.1f}%"
             if config.RISK_MODE == "pct"

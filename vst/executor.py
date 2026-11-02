@@ -64,7 +64,10 @@ def compute_size(exchange, symbol, entry, levels):
     free = free_balance(exchange)
     if free <= 0:
         raise RuntimeError(f"Saldo free {config.MARGIN_COIN} = 0 - tidak ada margin untuk entry.")
-    margin_used = free * levels["margin_pct"] / 100.0
+    if config.FIXED_MARGIN > 0:
+        margin_used = min(config.FIXED_MARGIN, free)
+    else:
+        margin_used = free * levels["margin_pct"] / 100.0
     notional = margin_used * levels["leverage"]
     amount = float(exchange.amount_to_precision(symbol, notional / entry))
     limits = exchange.market(symbol)["limits"]

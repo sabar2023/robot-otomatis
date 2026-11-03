@@ -79,7 +79,7 @@ def _daily_frame(fetch, symbol):
     return market_data.closed_candles(raw)
 
 
-def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None):
+def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_alerts=True):
     now = dt.datetime.now(dt.timezone.utc)
     log.info("Memindai %s ...", symbol)
     raw, src = fetch(symbol, config.TIMEFRAME, config.CANDLE_LIMIT)
@@ -111,7 +111,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None):
 
     if not result["passed"]:
         log.info("Tidak ada sinyal - %d layer filter tidak tercapai.", len(result["layers"]))
-        return
+        return {"symbol": symbol, "signal": False, "direction": None, "failed_layers": len(result["layers"])}
     if not fresh:
         log.info(
             "Sinyal %s berbasis candle tutup %s UTC (umur %.1f menit) - basi, dilewati.",
@@ -119,7 +119,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None):
             candle_close.strftime("%Y-%m-%d %H:%M"),
             age_minutes,
         )
-        return
+        return {"symbol": symbol, "signal": False, "direction": None, "skip": "basi"}
 
     auto = auto_global and bool(user["mode_otomatis"])
     execute_live = live and auto
@@ -145,18 +145,63 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None):
     database.log_trade(user["id"], symbol, levels, execution)
     log.info("Eksekusi [%s]: %s", execution["mode"], execution["detail"])
 
-    html = telegram_bot.build_alert_html(result, levels, execution, user)
-    try:
-        if telegram_bot.send_message(html) is not None:
-            log.info("Pesan alert terkirim ke Telegram (admin).")
-        else:
-            log.info("Telegram tidak dikonfigurasi - pesan hanya di log.")
-        user_chat = (user.get("tg_chat_id") or "").strip()
-        if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
-            if telegram_bot.send_message(html, chat_id=user_chat) is not None:
-                log.info("Pesan alert terkirim ke chat user %s.", user["email"])
-    except Exception as exc:
-        log.error("Gagal kirim alert Telegram: %s", _one_line(exc))
+    if send_alerts:
+        html = telegram_bot.build_alert_html(result, levels, execution, user)
+        try:
+            if telegram_bot.send_message(html) is not None:
+                log.info("Pesan alert terkirim ke Telegram (admin).")
+            else:
+                log.info("Telegram tidak dikonfigurasi - pesan hanya di log.")
+            user_chat = (user.get("tg_chat_id") or "").strip()
+            if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
+                if telegram_bot.send_message(html, chat_id=user_chat) is not None:
+                    log.info("Pesan alert terkirim ke chat user %s.", user["email"])
+        except Exception as exc:
+            log.error("Gagal kirim alert Telegram: %s", _one_line(exc))
+    return {
+        "symbol": symbol,
+        "signal": True,
+        "direction": result["direction"],
+        "levels": levels,
+        "execution": execution,
+    }
+
+
+def simulate_once(email):
+    chain = market_data.build_chain()
+    fetch = market_data.make_fetcher(chain)
+    users = resolve_users(email)
+    user = users[0] if users else None
+    if not user:
+        log.info("User %s tidak ditemukan - simulasi digagalkan.", email)
+        telegram_bot.send_message(telegram_bot.build_error_html(f"User {email} tidak ditemukan.", "dry-run"))
+        return 0
+
+    auto_global = database.auto_enabled()
+    daily_cache = {}
+    mode_label = "manual" if user.get("mode_manual") else "otomatis"
+    if user.get("mode_manual") and user["coins"]:
+        coins = user["coins"]
+    else:
+        coins, _ = watchlist.default_watchlist(chain)
+
+    log.info("=== Simulasi test: %s (%s) | mode: %s ===", user["nama"], user["email"], mode_label)
+    results = []
+    for symbol in coins:
+        try:
+            r = scan_symbol(False, fetch, user, symbol, auto_global, daily_cache, send_alerts=False)
+            if r:
+                results.append(r)
+        except Exception as exc:
+            log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
+            results.append({"symbol": symbol, "signal": False, "direction": None, "error": _one_line(exc)})
+
+    html = telegram_bot.build_simulation_html(user, mode_label, results)
+    sent = telegram_bot.send_message(html)
+    user_chat = (user.get("tg_chat_id") or "").strip()
+    if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
+        telegram_bot.send_message(html, chat_id=user_chat)
+    return 1 if sent else 0
 
 
 def scan_once(live, only_email=None):
@@ -218,6 +263,7 @@ def main():
     parser.add_argument("--live", action="store_true", help="Paksa mode live - kirim order ke BingX VST (demo) user")
     parser.add_argument("--loop", action="store_true", help="Jalankan terus tiap awal jam (hanya dev lokal)")
     parser.add_argument("--user", metavar="EMAIL", help="Hanya pindai user dengan email ini")
+    parser.add_argument("--simulate", action="store_true", help="Jalankan simulasi test user dan kirim ringkasan ke Telegram")
     parser.add_argument("--test-telegram", action="store_true", help="Kirim pesan tes untuk validasi kredensial Telegram")
     args = parser.parse_args()
 
@@ -253,6 +299,21 @@ def main():
             sys.exit(1)
         telegram_bot.send_test_message(live)
         log.info("Pesan tes Telegram terkirim. Kredensial valid.")
+        sys.exit(0)
+
+    if args.simulate:
+        if not args.user:
+            log.error("--simulate membutuhkan --user <email>.")
+            sys.exit(1)
+        try:
+            simulate_once(args.user)
+        except Exception as exc:
+            log.error("Simulasi gagal: %s", _one_line(exc))
+            try:
+                telegram_bot.send_message(telegram_bot.build_error_html(_one_line(exc), "dry-run"))
+            except Exception:
+                pass
+            sys.exit(1)
         sys.exit(0)
 
     users = database.fetch_users()

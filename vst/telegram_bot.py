@@ -69,6 +69,51 @@ def build_alert_html(result, levels, execution, user=None):
     return "\n".join(line for line in lines if line is not None)
 
 
+def build_simulation_html(user, mode_label, results):
+    margin_mode = (user.get("margin_mode") or "fixed").strip().lower()
+    manual = bool(user.get("mode_manual"))
+    lev = user.get("leverage") if manual else config.LEVERAGE_DEFAULT
+    if margin_mode == "pct":
+        mg_pct = user.get("margin_pct") or config.MARGIN_PCT
+        margin_line = f"dinamis {float(mg_pct):g}% saldo"
+    else:
+        margin_line = f"fixed {config.FIXED_MARGIN:g} {config.MARGIN_COIN}"
+
+    lines = [
+        "&#128311; <b>BRANDBISNIS V5.0 SIMULASI TEST</b>",
+        f"&#128100; <b>USER</b>     : {user['email']}",
+        f"&#9881;&#65039; <b>MODE</b>   : {mode_label.upper()}",
+        f"&#128176; <b>MARGIN</b>   : {margin_line}",
+        f"&#128737; <b>LEVERAGE</b> : {lev}x",
+        "",
+        f"&#128218; <b>Hasil scan {len(results)} koin:</b>",
+    ]
+    for r in results:
+        symbol = r.get("symbol")
+        if r.get("signal"):
+            direction = r.get("direction")
+            lv = r.get("levels") or {}
+            mark = "&#128994;" if direction == "LONG" else "&#128308;"
+            line = f"{mark} <b>{symbol}</b> : SINYAL {direction}"
+            entry = lv.get("entry")
+            if entry is not None:
+                line += (
+                    f" | entry {fmt_price(entry)}"
+                    f" | SL {fmt_price(lv.get('stop_loss', 0))}"
+                    f" | TP {fmt_price(lv.get('take_profit', 0))}"
+                )
+        else:
+            reason = " (candle basi)" if r.get("skip") == "basi" else ""
+            line = f"&#9898; <b>{symbol}</b> : STANDBY{reason}"
+        lines.append(line)
+
+    if not results:
+        lines.append("&#9888;&#65039; Tidak ada koin yang berhasil discan.")
+    lines.append("")
+    lines.append("&#9200; <i>Simulasi dry-run - tidak ada order dikirim.</i>")
+    return "\n".join(lines)
+
+
 def build_error_html(message, mode):
     mode_label = "LIVE VST" if mode == "live" else "DRY-RUN"
     return (

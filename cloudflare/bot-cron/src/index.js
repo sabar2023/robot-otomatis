@@ -2,7 +2,12 @@ const TARGETS = [
   { repo: "sabar2023/robot-otomatis", workflow: "cron-vst.yml" },
 ];
 
-async function dispatch(env, { repo, workflow }) {
+const SUPABASE_URL = "https://jklbczruvbxscpwxxfud.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Jj5TIfWxCu2vbsaj9Uoneg_EZjYrkta";
+
+async function dispatch(env, { repo, workflow, inputs }) {
+  const body = { ref: "main" };
+  if (inputs) body.inputs = inputs;
   const resp = await fetch(
     `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
     {
@@ -13,11 +18,11 @@ async function dispatch(env, { repo, workflow }) {
         "User-Agent": "bot-cron-worker",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-      body: JSON.stringify({ ref: "main" }),
+      body: JSON.stringify(body),
     }
   );
-  const body = resp.ok ? "" : (await resp.text()).slice(0, 200);
-  return { repo, workflow, status: resp.status, ok: resp.ok, body };
+  const respBody = resp.ok ? "" : (await resp.text()).slice(0, 200);
+  return { repo, workflow, status: resp.status, ok: resp.ok, body: respBody };
 }
 
 async function notify(env, text) {
@@ -60,6 +65,24 @@ export default {
     if (url.pathname === "/run" && url.searchParams.get("key") === env.TRIGGER_KEY) {
       const results = await runAll(env);
       return Response.json({ results });
+    }
+    if (url.pathname === "/simulate") {
+      const auth = request.headers.get("Authorization") || "";
+      const token = auth.replace(/^Bearer\s+/i, "");
+      if (!token) return Response.json({ error: "missing token" }, { status: 401 });
+      const check = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      });
+      if (!check.ok) return Response.json({ error: "unauthorized" }, { status: 401 });
+      const profile = await check.json();
+      const email = profile.email;
+      if (!email) return Response.json({ error: "no email" }, { status: 400 });
+      const result = await dispatch(env, {
+        repo: TARGETS[0].repo,
+        workflow: TARGETS[0].workflow,
+        inputs: { simulate_user: email },
+      });
+      return Response.json({ result });
     }
     return new Response("ok", { status: 200 });
   },

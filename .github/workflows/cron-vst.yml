@@ -11,6 +11,11 @@ on:
         description: "Kirim contoh alert Telegram dari eksekusi terakhir"
         type: boolean
         default: false
+      simulate_user:
+        description: "Email user untuk simulasi test (kirim ringkasan ke Telegram)"
+        type: string
+        required: false
+        default: ""
 
 jobs:
   vst-scan:
@@ -40,11 +45,14 @@ jobs:
           SETTINGS_ENC_KEY: ${{ secrets.SETTINGS_ENC_KEY }}
           TEST_TELEGRAM: ${{ inputs.test_telegram }}
           TEST_ALERT: ${{ inputs.test_alert }}
+          SIMULATE_USER: ${{ inputs.simulate_user }}
         run: |
           if [ "$TEST_TELEGRAM" = "true" ]; then
             python3 vst/main.py --test-telegram
           elif [ "$TEST_ALERT" = "true" ]; then
             python3 vst/telegram_alert_demo.py
+          elif [ -n "$SIMULATE_USER" ]; then
+            python3 vst/main.py --simulate --user "$SIMULATE_USER"
           else
             python3 vst/main.py
           fi

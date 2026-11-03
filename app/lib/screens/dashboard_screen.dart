@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme.dart';
@@ -29,6 +30,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _marginDynamic = false;
   bool _loaded = false;
   bool _busy = false;
+  bool _testing = false;
   String? _msg;
 
   @override
@@ -154,6 +156,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return v.clamp(lo, hi);
   }
 
+  Future<void> _testSimulate() async {
+    final token = _client.auth.currentSession?.accessToken;
+    if (token == null) {
+      setState(() => _msg = "Belum login.");
+      return;
+    }
+    setState(() {
+      _testing = true;
+      _msg = "Menjalankan test simulasi...";
+    });
+    try {
+      final resp = await http.post(
+        Uri.parse("https://bot-cron.sabar2023.workers.dev/simulate"),
+        headers: {"Authorization": "Bearer $token"},
+      ).timeout(const Duration(seconds: 30));
+      setState(() => _msg = resp.statusCode == 200
+          ? "Test simulasi dipicu. Hasil dikirim ke Telegram."
+          : "Gagal memicu test (HTTP ${resp.statusCode}).");
+    } catch (e) {
+      setState(() => _msg = "Gagal memicu test: $e");
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
@@ -227,6 +254,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
                 selected: <bool>{_manual},
                 onSelectionChanged: (s) => setState(() => _manual = s.first),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: _testing ? null : _testSimulate,
+                icon: _testing
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.play_circle_outline),
+                label: Text(_testing ? "Menjalankan..." : "Test Simulasi"),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Klik untuk memicu scan sesuai setelan ini dan kirim ringkasan ke Telegram.",
+                style: TextStyle(color: textMuted, fontSize: 11.5),
               ),
             ],
           ),

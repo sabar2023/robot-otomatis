@@ -1,4 +1,5 @@
 import sys
+import os
 import time
 import datetime as dt
 
@@ -6,7 +7,7 @@ import ccxt
 import pandas as pd
 
 
-sys.path.insert(0, ".")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import indicators as ind
 
@@ -38,28 +39,34 @@ SYMBOLS = [
     "ZEC/USDT:USDT",
 ]
 
-BARS = 4500
+SINCE_TS = int(dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc).timestamp() * 1000)
+MAX_BARS = 70000
 
 
 def clamp(value, lo, hi):
     return max(lo, min(hi, value))
 
 
-def fetch_candles(ex, symbol, bars):
-    now = int(time.time() * 1000)
-    cursor = now - bars * 3600 * 1000
+def fetch_candles(ex, symbol, since_ts=SINCE_TS, until_ts=None):
+    if until_ts is None:
+        until_ts = int(time.time() * 1000)
     rows = {}
-    while len(rows) < bars:
+    cursor = since_ts
+    while True:
         batch = ex.fetch_ohlcv(symbol, "1h", since=cursor, limit=1000)
         if not batch:
             break
         for c in batch:
             rows[c[0]] = c
-        cursor = batch[-1][0] + 3600 * 1000
-        if cursor > now:
+        last = batch[-1][0]
+        if last >= until_ts or len(rows) > MAX_BARS:
             break
-        time.sleep(0.3)
-    data = [rows[k] for k in sorted(rows)][-bars:]
+        nxt = last + 3600 * 1000
+        if nxt <= cursor:
+            break
+        cursor = nxt
+        time.sleep(0.25)
+    data = [rows[k] for k in sorted(rows)]
     return pd.DataFrame(data, columns=["ts", "open", "high", "low", "close", "volume"])
 
 
@@ -387,16 +394,22 @@ RISK_SETS = [
 
 
 def main():
-    ex = ccxt.bingx({"enableRateLimit": True, "timeout": 20000, "options": {"defaultType": "swap"}})
+    ex = ccxt.binance({"enableRateLimit": True, "timeout": 30000, "options": {"defaultType": "swap"}})
     frames = {}
-    btc_trend = daily_trend(fetch_candles(ex, "BTC/USDT:USDT", BARS))
+    btc_trend = daily_trend(fetch_candles(ex, "BTC/USDT:USDT"))
     for symbol in SYMBOLS:
         try:
-            df = fetch_candles(ex, symbol, BARS)
+            df = fetch_candles(ex, symbol)
             frames[symbol] = attach_trend(df, btc_trend)
         except Exception as exc:
             print(f"data {symbol} gagal: {str(exc).splitlines()[0][:100]}")
-    print(f"data siap: {len(frames)} simbol x ~{BARS} candle H1")
+    ranges = {}
+    for s, df in frames.items():
+        if len(df):
+            ranges[s] = (pd.to_datetime(df["ts"].iloc[0], unit="ms"), pd.to_datetime(df["ts"].iloc[-1], unit="ms"))
+    print(f"data siap: {len(frames)} simbol (H1 sejak 2020-01-01)")
+    for s, (a, b) in sorted(ranges.items(), key=lambda kv: kv[1][0]):
+        print(f"  {s:20s} {a:%Y-%m-%d} .. {b:%Y-%m-%d}")
     prepared = {s: build_frame(df, True) for s, df in frames.items()}
     for fname, fcfg in FILTER_SETS:
         sig_cache = {s: signals(f, fcfg) for s, f in prepared.items()}

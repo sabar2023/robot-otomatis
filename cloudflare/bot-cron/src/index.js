@@ -55,6 +55,16 @@ async function runAll(env) {
   return results;
 }
 
+function corsHeaders(request) {
+  const origin = request.headers.get("Origin") || "*";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     const results = await runAll(env);
@@ -62,28 +72,32 @@ export default {
   },
   async fetch(request, env) {
     const url = new URL(request.url);
+    const cors = corsHeaders(request);
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: cors });
+    }
     if (url.pathname === "/run" && url.searchParams.get("key") === env.TRIGGER_KEY) {
       const results = await runAll(env);
-      return Response.json({ results });
+      return Response.json({ results }, { headers: cors });
     }
     if (url.pathname === "/simulate") {
       const auth = request.headers.get("Authorization") || "";
       const token = auth.replace(/^Bearer\s+/i, "");
-      if (!token) return Response.json({ error: "missing token" }, { status: 401 });
+      if (!token) return Response.json({ error: "missing token" }, { status: 401, headers: cors });
       const check = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
       });
-      if (!check.ok) return Response.json({ error: "unauthorized" }, { status: 401 });
+      if (!check.ok) return Response.json({ error: "unauthorized" }, { status: 401, headers: cors });
       const profile = await check.json();
       const email = profile.email;
-      if (!email) return Response.json({ error: "no email" }, { status: 400 });
+      if (!email) return Response.json({ error: "no email" }, { status: 400, headers: cors });
       const result = await dispatch(env, {
         repo: TARGETS[0].repo,
         workflow: TARGETS[0].workflow,
         inputs: { simulate_user: email },
       });
-      return Response.json({ result });
+      return Response.json({ result }, { headers: cors });
     }
-    return new Response("ok", { status: 200 });
+    return new Response("ok", { status: 200, headers: cors });
   },
 };

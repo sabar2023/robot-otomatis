@@ -164,9 +164,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     setState(() {
       _testing = true;
-      _msg = "Menjalankan test simulasi...";
+      _msg = "Menyimpan setelan & menjalankan test...";
     });
     try {
+      await _save();
       final resp = await http.post(
         Uri.parse("https://bot-cron.sabar2023.workers.dev/simulate"),
         headers: {"Authorization": "Bearer $token"},

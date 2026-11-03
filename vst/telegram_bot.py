@@ -72,19 +72,26 @@ def build_alert_html(result, levels, execution, user=None):
 def build_simulation_html(user, mode_label, results):
     margin_mode = (user.get("margin_mode") or "fixed").strip().lower()
     manual = bool(user.get("mode_manual"))
-    lev = user.get("leverage") if manual else config.LEVERAGE_DEFAULT
+    lev = int(user.get("leverage") or config.LEVERAGE_DEFAULT) if manual else config.LEVERAGE_DEFAULT
     if margin_mode == "pct":
         mg_pct = user.get("margin_pct") or config.MARGIN_PCT
         margin_line = f"dinamis {float(mg_pct):g}% saldo"
     else:
         margin_line = f"fixed {config.FIXED_MARGIN:g} {config.MARGIN_COIN}"
 
+    sl_val = user.get("sl_pct") if manual else None
+    tp_val = user.get("tp_pct") if manual else None
+    sl_txt = f"{float(sl_val):.2f}%" if sl_val else f"{config.SL_PCT_DEFAULT:.2f}%"
+    tp_txt = f"{float(tp_val):.2f}%" if tp_val else f"{config.TP_PCT_DEFAULT:.2f}%"
+
     lines = [
         "&#128311; <b>BRANDBISNIS V5.0 SIMULASI TEST</b>",
         f"&#128100; <b>USER</b>     : {user['email']}",
-        f"&#9881;&#65039; <b>MODE</b>   : {mode_label.upper()}",
+        f"&#9881;&#65039; <b>MODE</b>  : {mode_label.upper()}",
         f"&#128176; <b>MARGIN</b>   : {margin_line}",
         f"&#128737; <b>LEVERAGE</b> : {lev}x",
+        f"&#128721; <b>SL</b>       : {sl_txt}",
+        f"&#9989; <b>TP</b>       : {tp_txt}",
         "",
         f"&#128218; <b>Hasil scan {len(results)} koin:</b>",
     ]
@@ -96,12 +103,30 @@ def build_simulation_html(user, mode_label, results):
             mark = "&#128994;" if direction == "LONG" else "&#128308;"
             line = f"{mark} <b>{symbol}</b> : SINYAL {direction}"
             entry = lv.get("entry")
+            sl = lv.get("stop_loss")
+            tp = lv.get("take_profit")
+            sl_pct = lv.get("sl_distance_pct")
+            tp_pct = lv.get("tp_distance_pct")
+            rr = lv.get("rr")
+            parts = []
             if entry is not None:
-                line += (
-                    f" | entry {fmt_price(entry)}"
-                    f" | SL {fmt_price(lv.get('stop_loss', 0))}"
-                    f" | TP {fmt_price(lv.get('take_profit', 0))}"
-                )
+                parts.append(f"Entry {fmt_price(entry)}")
+            if sl is not None:
+                p = f"SL {fmt_price(sl)}"
+                if sl_pct is not None:
+                    p += f" ({sl_pct:.2f}%)"
+                parts.append(p)
+            if tp is not None:
+                p = f"TP {fmt_price(tp)}"
+                if tp_pct is not None:
+                    p += f" ({tp_pct:.2f}%)"
+                parts.append(p)
+            if rr is not None:
+                parts.append(f"RR 1:{rr:g}")
+            if lv.get("leverage") is not None:
+                parts.append(f"Lev {lv['leverage']}x")
+            if parts:
+                line += " | " + " | ".join(parts)
         else:
             reason = " (candle basi)" if r.get("skip") == "basi" else ""
             line = f"&#9898; <b>{symbol}</b> : STANDBY{reason}"

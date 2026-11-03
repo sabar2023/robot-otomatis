@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import 'dashboard_screen.dart';
 import 'history_screen.dart';
+import 'reports_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -28,11 +29,11 @@ class _MainShellState extends State<MainShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _tab, children: const [DashboardScreen(), HistoryScreen()]),
+      body: IndexedStack(index: _tab, children: const [DashboardScreen(), HistoryScreen(), ReportsScreen()]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) {
-          if (i == 2) {
+          if (i == 3) {
             Supabase.instance.client.auth.signOut();
             return;
           }
@@ -48,6 +49,11 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
             label: "Riwayat",
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.insert_chart_outlined),
+            selectedIcon: Icon(Icons.insert_chart),
+            label: "Laporan",
           ),
           NavigationDestination(
             icon: Icon(Icons.logout_outlined),

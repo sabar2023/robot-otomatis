@@ -56,6 +56,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  String? _distPct(dynamic entry, dynamic target) {
+    final e = double.tryParse("$entry");
+    final t = double.tryParse("$target");
+    if (e == null || t == null || e == 0) return null;
+    final pct = ((t - e) / e * 100).abs();
+    return "${pct.toStringAsFixed(2)}%";
+  }
+
   Color _pnlColor(dynamic v) {
     if (v == null) return textMuted;
     final d = (v as num).toDouble();
@@ -165,6 +173,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Expanded(child: _tile("Entry", _num(t["entry_price"]))),
               Expanded(child: _tile("SL", _num(t["sl_price"]))),
               Expanded(child: _tile("TP", _num(t["tp_price"]))),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _tile("SL %", _distPct(t["entry_price"], t["sl_price"]) ?? "-", color: downColor)),
+              Expanded(child: _tile("TP %", _distPct(t["entry_price"], t["tp_price"]) ?? "-", color: upColor)),
+              Expanded(child: _tile("Margin", _num(t["margin_used"]))),
               Expanded(child: _tile("Leverage", "${t["leverage"]}x")),
             ],
           ),

@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme.dart';
@@ -92,6 +96,97 @@ class _AdminScreenState extends State<AdminScreen> {
       await Supabase.instance.client.from("users_profile").update(payload).eq("id", id);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tersimpan")));
       await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
+      }
+    }
+  }
+
+  Future<void> _loginAs(Map<String, dynamic> u) async {
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final email = (u["email"] ?? "").toString();
+    if (token == null || email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Token/email tidak valid.")));
+      return;
+    }
+    try {
+      final resp = await http
+          .post(
+            Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/login-as"),
+            headers: {"Authorization": "Bearer $token", "Content-Type": "application/json"},
+            body: jsonEncode({"email": email}),
+          )
+          .timeout(const Duration(seconds: 30));
+      final body = jsonDecode(resp.body);
+      if (resp.statusCode == 200 && body["url"] != null) {
+        final url = body["url"].toString();
+        await Clipboard.setData(ClipboardData(text: url));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Link login $email tersalin. Buka di tab baru/incognito.")));
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: ${body["message"] ?? body["error"] ?? "HTTP ${resp.statusCode}"}")));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
+      }
+    }
+  }
+
+  Future<void> _resetPassword(Map<String, dynamic> u) async {
+    final email = (u["email"] ?? "-").toString();
+    final ctrl = TextEditingController();
+    final pwd = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgPanel,
+        title: Text("Ubah Password $email"),
+        content: TextField(
+          controller: ctrl,
+          obscureText: true,
+          decoration: appDecoration(label: "Password Baru (min 6)"),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Batal")),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text("Simpan")),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (pwd == null || pwd.length < 6) {
+      if (pwd != null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Password minimal 6 karakter.")));
+      }
+      return;
+    }
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final authId = (u["auth_id"] ?? "").toString();
+    if (token == null || authId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("auth_id tidak ditemukan.")));
+      return;
+    }
+    try {
+      final resp = await http
+          .post(
+            Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/set-password"),
+            headers: {"Authorization": "Bearer $token", "Content-Type": "application/json"},
+            body: jsonEncode({"auth_id": authId, "password": pwd}),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Password $email berhasil diubah.")));
+        }
+      } else {
+        if (mounted) {
+          final body = jsonDecode(resp.body);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: ${body["message"] ?? body["error"] ?? "HTTP ${resp.statusCode}"}")));
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
@@ -261,6 +356,8 @@ class _AdminScreenState extends State<AdminScreen> {
               _miniBtn(premium ? "Turunkan Free" : "Jadikan Premium", () => _patchUser(id, {"plan": premium ? "free_trial" : "premium"})),
               _miniBtn(kyc == "verified" ? "Batalkan KYC" : "Verifikasi KYC", () => _patchUser(id, {"kyc_status": kyc == "verified" ? "pending" : "verified"})),
               _miniBtn(role == "admin" ? "Jadikan Customer" : "Jadikan Admin", () => _patchUser(id, {"role": role == "admin" ? "customer" : "admin"})),
+              _miniBtn("Login Pelanggan", () => _loginAs(u)),
+              _miniBtn("Ubah Password", () => _resetPassword(u)),
             ],
           ),
         ],

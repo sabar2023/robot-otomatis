@@ -215,6 +215,80 @@ async function getAuthUser(request) {
   return check.json();
 }
 
+async function requireAdmin(request, env) {
+  const user = await getAuthUser(request);
+  if (!user) return { ok: false, status: 401, body: { error: "unauthorized" } };
+  const sk = env.SUPABASE_SERVICE_KEY;
+  if (!sk) return { ok: false, status: 500, body: { error: "service_key_missing" } };
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/users_profile?auth_id=eq.${user.id}&select=role`,
+    { headers: restHeaders(sk) }
+  );
+  const rows = await resp.json();
+  const prof = Array.isArray(rows) ? rows[0] : rows;
+  if (!prof || prof.role !== "admin") {
+    return { ok: false, status: 403, body: { error: "forbidden" } };
+  }
+  return { ok: true, user };
+}
+
+async function adminLoginAs(env, request) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) return { status: auth.status, body: auth.body };
+  const sk = env.SUPABASE_SERVICE_KEY;
+  let body = {};
+  try {
+    body = await request.json();
+  } catch (e) {
+    body = {};
+  }
+  const email = String(body.email || "").trim();
+  if (!email) return { status: 400, body: { error: "email_required" } };
+  const resp = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: restHeaders(sk),
+    body: JSON.stringify({ type: "magiclink", email }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.action_link) {
+    return {
+      status: 502,
+      body: { error: "generate_link_failed", message: String(data.msg || data.message || resp.status).slice(0, 200) },
+    };
+  }
+  return { status: 200, body: { url: data.action_link } };
+}
+
+async function adminSetPassword(env, request) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) return { status: auth.status, body: auth.body };
+  const sk = env.SUPABASE_SERVICE_KEY;
+  let body = {};
+  try {
+    body = await request.json();
+  } catch (e) {
+    body = {};
+  }
+  const authId = String(body.auth_id || "").trim();
+  const password = String(body.password || "");
+  if (!authId || !password || password.length < 6) {
+    return { status: 400, body: { error: "invalid_input", message: "auth_id dan password (min 6) wajib diisi." } };
+  }
+  const resp = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authId}`, {
+    method: "PUT",
+    headers: restHeaders(sk),
+    body: JSON.stringify({ password }),
+  });
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    return {
+      status: 502,
+      body: { error: "update_failed", message: String(data.msg || data.message || resp.status).slice(0, 200) },
+    };
+  }
+  return { status: 200, body: { ok: true } };
+}
+
 async function createPayment(env, request) {
   const user = await getAuthUser(request);
   if (!user) return { status: 401, body: { error: "unauthorized" } };
@@ -397,6 +471,14 @@ export default {
     }
     if (url.pathname === "/pay") {
       const result = await createPayment(env, request);
+      return Response.json(result.body, { status: result.status, headers: cors });
+    }
+    if (url.pathname === "/admin/login-as" && request.method === "POST") {
+      const result = await adminLoginAs(env, request);
+      return Response.json(result.body, { status: result.status, headers: cors });
+    }
+    if (url.pathname === "/admin/set-password" && request.method === "POST") {
+      const result = await adminSetPassword(env, request);
       return Response.json(result.body, { status: result.status, headers: cors });
     }
     if (url.pathname === "/payment/callback") {

@@ -209,12 +209,38 @@ def fetch_users():
         return []
 
 
-def can_execute_live(user):
+def can_execute_live(user, settings=None):
     if user.get("role") == "admin":
         return True
     if user.get("is_blocked"):
         return False
-    return (user.get("plan") or "free_trial").strip().lower() == "premium"
+    if (user.get("plan") or "free_trial").strip().lower() != "premium":
+        return False
+    settings = settings or {}
+    if settings.get("feature_premium_active") == "false":
+        return False
+    return True
+
+
+def fetch_settings():
+    if not is_configured():
+        return {}
+    try:
+        resp = requests.get(
+            f"{_url()}/rest/v1/admin_settings?select=key,value",
+            headers=_headers(_service_key()),
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            log.warning("Supabase admin_settings: HTTP %s", resp.status_code)
+            return {}
+        settings = {}
+        for row in resp.json():
+            settings[row.get("key")] = row.get("value")
+        return settings
+    except Exception as exc:
+        log.warning("Supabase admin_settings gagal: %s", _err_text(exc))
+        return {}
 
 
 def auto_enabled():

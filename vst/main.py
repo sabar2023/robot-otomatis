@@ -85,7 +85,7 @@ def _daily_frame(fetch, symbol):
     return market_data.closed_candles(raw)
 
 
-def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_alerts=True):
+def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_alerts=True, settings=None):
     now = dt.datetime.now(dt.timezone.utc)
     log.info("Memindai %s ...", symbol)
     raw, src = fetch(symbol, config.TIMEFRAME, config.CANDLE_LIMIT)
@@ -131,7 +131,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
     execute_live = live and auto
     if live and not auto:
         log.info("Mode otomatis user / ro_config.auto_trading nonaktif - eksekusi live dilewati (simulasi).")
-    if execute_live and not database.can_execute_live(user):
+    if execute_live and not database.can_execute_live(user, settings):
         log.info("Akses live dibatasi (paket %s) - eksekusi live dilewati (simulasi, sinyal saja).", user.get("plan"))
         execute_live = False
 
@@ -222,9 +222,14 @@ def scan_once(live, only_email=None):
         return 0
 
     auto_global = database.auto_enabled()
+    settings = database.fetch_settings()
     watch_cache = {}
     daily_cache = {}
     for user in users:
+        premium = user.get("role") == "admin" or (user.get("plan") or "free_trial").strip().lower() == "premium"
+        if not premium and settings.get("feature_free_active") == "false":
+            log.info("=== User: %s (%s) | fitur Free nonaktif - dilewati ===", user["nama"], user["email"])
+            continue
         mode_label = "manual" if user.get("mode_manual") else "otomatis"
         log.info("=== User: %s (%s) | otomatis: %s | mode: %s ===", user["nama"], user["email"], user["mode_otomatis"], mode_label)
         if user.get("mode_manual") and user["coins"]:
@@ -237,7 +242,7 @@ def scan_once(live, only_email=None):
             coins = watch_cache["default"]
         for symbol in coins:
             try:
-                scan_symbol(live, fetch, user, symbol, auto_global, daily_cache)
+                scan_symbol(live, fetch, user, symbol, auto_global, daily_cache, settings=settings)
             except Exception as exc:
                 log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
     closed = pnl.sync_all(users, live)

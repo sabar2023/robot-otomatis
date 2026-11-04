@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../profile.dart';
 import '../theme.dart';
+import 'package_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -15,6 +16,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final _client = Supabase.instance.client;
   List<Map<String, dynamic>> _rows = [];
   bool _loaded = false;
+  bool _locked = false;
 
   static const _bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -72,6 +74,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _load() async {
     try {
+      final access = await fetchSignalAccess();
+      if (!mounted) return;
+      _locked = access != "premium" && access != "trial";
+      if (_locked) {
+        setState(() => _loaded = true);
+        return;
+      }
       final pid = await ensureProfile();
       if (pid == null || !mounted) return;
       final rows = await _client
@@ -114,6 +123,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (!_loaded) {
       return const Center(child: CircularProgressIndicator(color: accentMain));
     }
+    if (_locked) {
+      return _buildLock();
+    }
     return RefreshIndicator(
       onRefresh: _load,
       color: accentMain,
@@ -136,6 +148,39 @@ class _HistoryScreenState extends State<HistoryScreen> {
               itemCount: _rows.length,
               itemBuilder: (c, i) => _buildCard(_rows[i]),
             ),
+    );
+  }
+
+  Widget _buildLock() {
+    return ListView(
+      padding: const EdgeInsets.only(top: 40),
+      children: [
+        panelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.lock_outline, color: accentMain, size: 44),
+              const SizedBox(height: 14),
+              const Text(
+                "Akses sinyal terkunci",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Masa trial gratis Anda telah berakhir. Upgrade ke Premium untuk mendapatkan kembali sinyal dan fitur lengkapnya.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: textMuted, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PackageScreen())),
+                child: const Text("Upgrade ke Premium"),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

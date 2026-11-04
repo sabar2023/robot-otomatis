@@ -444,6 +444,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
               const _SectionTitle("Kredensial & Notifikasi"),
               const SizedBox(height: 12),
+              TextField(
+                controller: _tg,
+                decoration: appDecoration(label: "Telegram Chat ID", hintText: "opsional, sinyal ke chat pribadi"),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Dapatkan Chat ID dengan chat ke bot Telegram lalu kirim /start.",
+                style: TextStyle(color: textMuted, fontSize: 11.5),
+              ),
+              const SizedBox(height: 12),
               if (_premium) ...[
                 TextField(
                   controller: _api,
@@ -454,11 +464,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   controller: _sec,
                   obscureText: true,
                   decoration: appDecoration(label: "BingX Secret Key", hintText: "kosongkan jika tidak diganti"),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _tg,
-                  decoration: appDecoration(label: "Telegram Chat ID", hintText: "opsional, notifikasi pribadi"),
                 ),
               ] else ...[
                 Container(
@@ -476,7 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              "Kredensial BingX & notifikasi pribadi adalah fitur Premium.",
+                              "Kredensial BingX (untuk live order) adalah fitur Premium.",
                               style: TextStyle(color: textMuted, fontSize: 12.5),
                             ),
                           ),

@@ -204,6 +204,30 @@ function restHeaders(sk) {
   };
 }
 
+async function telegramWebhook(env, request) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!token) return new Response("no token", { status: 503 });
+  let update = {};
+  try {
+    update = await request.json();
+  } catch (e) {
+    update = {};
+  }
+  const msg = (update.message || update.edited_message) || {};
+  const chatId = msg.chat ? msg.chat.id : null;
+  if (!chatId) return new Response("ok", { status: 200 });
+  const text = (msg.text || "").toString().trim();
+  const reply = text.toLowerCase().startsWith("/start") || !text
+    ? "Halo! Chat ID Telegram kamu:\n\n<code>" + chatId + "</code>\n\nSalin kode di atas ke kolom <b>Telegram Chat ID</b> di aplikasi BrandBisnis."
+    : "Chat ID Telegram kamu: <code>" + chatId + "</code>\n\nSalin ke kolom <b>Telegram Chat ID</b> di aplikasi BrandBisnis.";
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text: reply, parse_mode: "HTML" }),
+  });
+  return new Response("ok", { status: 200 });
+}
+
 async function getAuthUser(request) {
   const auth = request.headers.get("Authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "");
@@ -484,6 +508,13 @@ export default {
     if (url.pathname === "/payment/callback") {
       try {
         return await handlePaymentCallback(env, request);
+      } catch (err) {
+        return new Response(String(err), { status: 500 });
+      }
+    }
+    if (url.pathname === "/telegram" && request.method === "POST") {
+      try {
+        return await telegramWebhook(env, request);
       } catch (err) {
         return new Response(String(err), { status: 500 });
       }

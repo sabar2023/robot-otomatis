@@ -156,15 +156,19 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
 
     if send_alerts:
         html = telegram_bot.build_alert_html(result, levels, execution, user)
+        user_chat = (user.get("tg_chat_id") or "").strip()
         try:
-            if telegram_bot.send_message(html) is not None:
-                log.info("Pesan alert terkirim ke Telegram (admin).")
-            else:
-                log.info("Telegram tidak dikonfigurasi - pesan hanya di log.")
-            user_chat = (user.get("tg_chat_id") or "").strip()
+            sent_any = False
             if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
                 if telegram_bot.send_message(html, chat_id=user_chat) is not None:
-                    log.info("Pesan alert terkirim ke chat user %s.", user["email"])
+                    sent_any = True
+                    log.info("Sinyal dikirim ke chat pribadi %s.", user["email"])
+            if user.get("role") == "admin":
+                if telegram_bot.send_message(html) is not None:
+                    sent_any = True
+                    log.info("Sinyal admin dikirim ke grup utama (monitoring).")
+            if not sent_any:
+                log.info("User tanpa chat pribadi - sinyal hanya dicatat (in-app).")
         except Exception as exc:
             log.error("Gagal kirim alert Telegram: %s", _one_line(exc))
     return {
@@ -184,6 +188,16 @@ def simulate_once(email):
     if not user:
         log.info("User %s tidak ditemukan - simulasi digagalkan.", email)
         telegram_bot.send_message(telegram_bot.build_error_html(f"User {email} tidak ditemukan.", "dry-run"))
+        return 0
+
+    settings = database.fetch_settings()
+    access = database.signal_access(user, settings)
+    if access not in ("premium", "trial"):
+        log.info("User %s tidak punya akses sinyal (%s) - simulasi digagalkan.", email, access)
+        user_chat = (user.get("tg_chat_id") or "").strip()
+        err = telegram_bot.build_error_html("Akses sinyal berakhir. Upgrade ke Premium untuk melanjutkan.", "dry-run")
+        if user_chat:
+            telegram_bot.send_message(err, chat_id=user_chat)
         return 0
 
     auto_global = database.auto_enabled()
@@ -226,12 +240,12 @@ def scan_once(live, only_email=None):
     watch_cache = {}
     daily_cache = {}
     for user in users:
-        premium = user.get("role") == "admin" or (user.get("plan") or "free_trial").strip().lower() == "premium"
-        if not premium and settings.get("feature_free_active") == "false":
-            log.info("=== User: %s (%s) | fitur Free nonaktif - dilewati ===", user["nama"], user["email"])
+        access = database.signal_access(user, settings)
+        if access in ("blocked", "disabled", "expired"):
+            log.info("=== User: %s (%s) | akses %s - dilewati (sinyal dikunci) ===", user["nama"], user["email"], access)
             continue
         mode_label = "manual" if user.get("mode_manual") else "otomatis"
-        log.info("=== User: %s (%s) | otomatis: %s | mode: %s ===", user["nama"], user["email"], user["mode_otomatis"], mode_label)
+        log.info("=== User: %s (%s) | akses: %s | otomatis: %s | mode: %s ===", user["nama"], user["email"], access, user["mode_otomatis"], mode_label)
         if user.get("mode_manual") and user["coins"]:
             coins = user["coins"]
             log.info("Watchlist manual: %s", ", ".join(coins))

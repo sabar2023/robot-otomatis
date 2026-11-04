@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../profile.dart';
 import '../theme.dart';
+import 'package_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -15,6 +16,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final _client = Supabase.instance.client;
   List<Map<String, dynamic>> _rows = [];
   bool _loaded = false;
+  bool _locked = false;
   int _period = 2;
 
   static const _bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -29,6 +31,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Future<void> _load() async {
     try {
+      final access = await fetchSignalAccess();
+      if (!mounted) return;
+      _locked = access != "premium";
+      if (_locked) {
+        setState(() => _loaded = true);
+        return;
+      }
       final pid = await ensureProfile();
       if (pid == null || !mounted) return;
       final rows = await _client
@@ -141,6 +150,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (!_loaded) {
       return const Center(child: CircularProgressIndicator(color: accentMain));
     }
+    if (_locked) {
+      return _buildLock();
+    }
     final groups = _grouped();
     final totalPnl = groups.fold<double>(0, (s, g) => s + (g["pnl"] as double));
     final totalN = groups.fold<int>(0, (s, g) => s + (g["n"] as int));
@@ -195,6 +207,39 @@ class _ReportsScreenState extends State<ReportsScreen> {
           for (final g in groups) _periodCard(g),
         ],
       ),
+    );
+  }
+
+  Widget _buildLock() {
+    return ListView(
+      padding: const EdgeInsets.only(top: 40),
+      children: [
+        panelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.lock_outline, color: accentMain, size: 44),
+              const SizedBox(height: 14),
+              const Text(
+                "Laporan adalah fitur Premium",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Upgrade ke Premium untuk melihat laporan keuntungan, winrate, dan riwayat PnL.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: textMuted, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PackageScreen())),
+                child: const Text("Upgrade ke Premium"),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

@@ -222,6 +222,32 @@ def can_execute_live(user, settings=None):
     return True
 
 
+def signal_access(user, settings=None):
+    if user.get("role") == "admin":
+        return "premium"
+    if user.get("is_blocked"):
+        return "blocked"
+    settings = settings or {}
+    plan = (user.get("plan") or "free_trial").strip().lower()
+    if plan == "premium":
+        if settings.get("feature_premium_active") == "false":
+            return "disabled"
+        return "premium"
+    if settings.get("feature_free_active") == "false":
+        return "disabled"
+    trial = user.get("trial_ends_at")
+    if trial:
+        try:
+            ends = dt.datetime.fromisoformat(str(trial).replace("Z", "+00:00"))
+            if ends.tzinfo is None:
+                ends = ends.replace(tzinfo=dt.timezone.utc)
+            if dt.datetime.now(dt.timezone.utc) < ends:
+                return "trial"
+        except Exception:
+            pass
+    return "expired"
+
+
 def fetch_settings():
     if not is_configured():
         return {}

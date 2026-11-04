@@ -64,7 +64,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final name = x.name.isEmpty ? "$kind.jpg" : x.name;
     final ext = name.contains(".") ? name.split(".").last : "jpg";
     final path = "${_pid ?? 'user'}/${DateTime.now().millisecondsSinceEpoch}_$kind.$ext";
-    await Supabase.instance.client.storage.from("kyc").upload(path, bytes);
+    await Supabase.instance.client.storage.from("kyc").uploadBinary(path, bytes);
     return Supabase.instance.client.storage.from("kyc").getPublicUrl(path);
   }
 

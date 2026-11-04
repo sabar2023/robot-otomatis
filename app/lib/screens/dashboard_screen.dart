@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme.dart';
+import 'package_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,6 +29,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _mode = false;
   bool _manual = false;
   bool _marginDynamic = false;
+  bool _premium = false;
   bool _loaded = false;
   bool _busy = false;
   bool _testing = false;
@@ -62,6 +64,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final pid = idRaw?.toString();
       _profileId = pid;
       if (pid == null) return;
+      _premium = (prof["plan"] ?? "free_trial") == "premium" ||
+          (prof["role"] ?? "customer") == "admin";
       _email = (prof["email"] ?? "").toString();
       _nama.text = (prof["nama"] ?? "").toString();
       _hp.text = (prof["no_hp"] ?? "").toString();
@@ -117,9 +121,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .eq("id", pid);
       final payload = <String, dynamic>{
         "user_id": pid,
-        "mode_otomatis": _mode,
-        "mode_manual": _manual,
-        "margin_mode": _marginDynamic ? "pct" : "fixed",
+        "mode_otomatis": _premium && _mode,
+        "mode_manual": _premium && _manual,
+        "margin_mode": (_premium && _marginDynamic) ? "pct" : "fixed",
         "koin_pilihan": _coins.text.split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
         "leverage": _clampInt(_lev.text, 5, 20, 5),
         "margin_persen": _clampDouble(_margin.text, 1, 100, 10),
@@ -154,6 +158,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final v = double.tryParse(raw.trim());
     if (v == null) return dft;
     return v.clamp(lo, hi);
+  }
+
+  Future<void> _showUpgrade() async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgPanel,
+        title: const Row(
+          children: [
+            Icon(Icons.workspace_premium, color: accentMain),
+            SizedBox(width: 8),
+            Text("Fitur Premium"),
+          ],
+        ),
+        content: const Text(
+          "Fitur ini hanya tersedia untuk pelanggan Premium.\n\n"
+          "Upgrade untuk mengaktifkan live order, mode manual, margin dinamis, dan kredensial BingX.",
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Nanti")),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Upgrade Sekarang")),
+        ],
+      ),
+    );
+    if (go == true && mounted) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PackageScreen()));
+    }
+  }
+
+  Widget _premiumLock() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: accentMain.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accentMain.withOpacity(0.5)),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock, size: 12, color: accentMain),
+          SizedBox(width: 4),
+          Text("PREMIUM", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: accentMain, letterSpacing: 0.8)),
+        ],
+      ),
+    );
   }
 
   Future<void> _testSimulate() async {
@@ -224,25 +274,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
         panelCard(
           child: SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text("Mode Otomatis", style: TextStyle(fontWeight: FontWeight.w700)),
+            title: Row(
+              children: [
+                const Text("Mode Otomatis", style: TextStyle(fontWeight: FontWeight.w700)),
+                if (!_premium) ...[
+                  const SizedBox(width: 8),
+                  _premiumLock(),
+                ],
+              ],
+            ),
             subtitle: Text(
-              _mode
+              _premium && _mode
                   ? "Bot mengeksekusi order live (isolated margin, bracket SL/TP)."
                   : "Hanya sinyal dan riwayat simulasi (tanpa order live).",
               style: const TextStyle(color: textMuted, fontSize: 12.5),
             ),
-            value: _mode,
-            onChanged: (v) => setState(() => _mode = v),
+            value: _premium ? _mode : false,
+            onChanged: (v) {
+              if (!_premium) {
+                _showUpgrade();
+                return;
+              }
+              setState(() => _mode = v);
+            },
           ),
         ),
         panelCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Mode Pengaturan", style: TextStyle(fontWeight: FontWeight.w700)),
+              Row(
+                children: [
+                  const Text("Mode Pengaturan", style: TextStyle(fontWeight: FontWeight.w700)),
+                  if (!_premium) ...[
+                    const SizedBox(width: 8),
+                    _premiumLock(),
+                  ],
+                ],
+              ),
               const SizedBox(height: 6),
               Text(
-                _manual
+                _premium && _manual
                     ? "Anda mengatur koin, leverage, margin, TP/SL sendiri."
                     : "Bot memakai strategi default (top-5 volume, leverage & SL/TP standar).",
                 style: const TextStyle(color: textMuted, fontSize: 12.5),
@@ -253,8 +325,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ButtonSegment(value: false, label: Text("Otomatis"), icon: Icon(Icons.smart_toy_outlined)),
                   ButtonSegment(value: true, label: Text("Manual"), icon: Icon(Icons.tune)),
                 ],
-                selected: <bool>{_manual},
-                onSelectionChanged: (s) => setState(() => _manual = s.first),
+                selected: <bool>{_premium ? _manual : false},
+                onSelectionChanged: (s) {
+                  final wantManual = s.first;
+                  if (wantManual && !_premium) {
+                    _showUpgrade();
+                    return;
+                  }
+                  setState(() => _manual = wantManual);
+                },
               ),
               const SizedBox(height: 14),
               OutlinedButton.icon(
@@ -279,21 +358,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const Text("Margin per Order", style: TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text(
-                _marginDynamic
+                _premium && _marginDynamic
                     ? "Margin dihitung dinamis dari saldo terkini (compounding)."
                     : "Margin tetap 10% dari saldo terkini per order.",
                 style: const TextStyle(color: textMuted, fontSize: 12.5),
               ),
               const SizedBox(height: 12),
               SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text("Fixed 10%"), icon: Icon(Icons.lock_outline)),
-                  ButtonSegment(value: true, label: Text("Dinamis %"), icon: Icon(Icons.trending_up)),
+                segments: [
+                  const ButtonSegment(value: false, label: Text("Fixed 10%"), icon: Icon(Icons.lock_outline)),
+                  ButtonSegment(value: true, label: const Text("Dinamis %"), icon: Icon(_premium ? Icons.trending_up : Icons.lock)),
                 ],
-                selected: <bool>{_marginDynamic},
-                onSelectionChanged: (s) => setState(() => _marginDynamic = s.first),
+                selected: <bool>{_premium ? _marginDynamic : false},
+                onSelectionChanged: (s) {
+                  final wantDynamic = s.first;
+                  if (wantDynamic && !_premium) {
+                    _showUpgrade();
+                    return;
+                  }
+                  setState(() => _marginDynamic = wantDynamic);
+                },
               ),
-              if (_marginDynamic) ...[
+              if (_premium && _marginDynamic) ...[
                 const SizedBox(height: 12),
                 TextField(
                   controller: _margin,
@@ -318,7 +404,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: appDecoration(label: "No. HP"),
               ),
               const SizedBox(height: 16),
-              if (_manual) ...[
+              if (_premium && _manual) ...[
                 const _SectionTitle("Strategi"),
                 const SizedBox(height: 12),
                 TextField(
@@ -358,21 +444,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
               const _SectionTitle("Kredensial & Notifikasi"),
               const SizedBox(height: 12),
-              TextField(
-                controller: _api,
-                decoration: appDecoration(label: "BingX API Key", hintText: "kosongkan jika tidak diganti"),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _sec,
-                obscureText: true,
-                decoration: appDecoration(label: "BingX Secret Key", hintText: "kosongkan jika tidak diganti"),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _tg,
-                decoration: appDecoration(label: "Telegram Chat ID", hintText: "opsional, notifikasi pribadi"),
-              ),
+              if (_premium) ...[
+                TextField(
+                  controller: _api,
+                  decoration: appDecoration(label: "BingX API Key", hintText: "kosongkan jika tidak diganti"),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _sec,
+                  obscureText: true,
+                  decoration: appDecoration(label: "BingX Secret Key", hintText: "kosongkan jika tidak diganti"),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _tg,
+                  decoration: appDecoration(label: "Telegram Chat ID", hintText: "opsional, notifikasi pribadi"),
+                ),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF062830),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF155E6E)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.vpn_key_off, color: textMuted),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              "Kredensial BingX & notifikasi pribadi adalah fitur Premium.",
+                              style: TextStyle(color: textMuted, fontSize: 12.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: _busy ? null : () => _showUpgrade(),
+                        child: const Text("Upgrade ke Premium"),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
               FilledButton(
                 onPressed: _busy ? null : _save,
@@ -388,11 +506,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 12),
                 Text(_msg!, style: const TextStyle(color: accentSoft, fontSize: 13, fontStyle: FontStyle.italic)),
               ],
-              const SizedBox(height: 6),
-              const Text(
-                "API key plaintext otomatis dienkripsi engine pada run berikutnya.",
-                style: TextStyle(color: textMuted, fontSize: 11.5),
-              ),
+              if (_premium) ...[
+                const SizedBox(height: 6),
+                const Text(
+                  "API key plaintext otomatis dienkripsi engine pada run berikutnya.",
+                  style: TextStyle(color: textMuted, fontSize: 11.5),
+                ),
+              ],
             ],
           ),
         ),

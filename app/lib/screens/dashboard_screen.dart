@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../theme.dart';
 import 'package_screen.dart';
@@ -33,7 +36,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _loaded = false;
   bool _busy = false;
   bool _testing = false;
+  bool _connectingTg = false;
   String? _msg;
+
+  static const _botUsername = "Editor_virna_bot";
 
   @override
   void initState() {
@@ -158,6 +164,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final v = double.tryParse(raw.trim());
     if (v == null) return dft;
     return v.clamp(lo, hi);
+  }
+
+  Future<void> _connectTelegram() async {
+    final pid = _profileId;
+    if (pid == null) return;
+    setState(() {
+      _connectingTg = true;
+      _msg = "Membuat kode koneksi...";
+    });
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    final r = Random();
+    final token = List.generate(24, (_) => chars[r.nextInt(chars.length)]).join();
+    try {
+      await _client.from("user_settings").upsert(
+        {
+          "user_id": pid,
+          "telegram_link_token": token,
+          "updated_at": DateTime.now().toIso8601String(),
+        },
+        onConflict: "user_id",
+      );
+      final uri = Uri.parse("https://t.me/$_botUsername?start=$token");
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        if (mounted) setState(() => _msg = "Tidak bisa membuka Telegram. Buka manual: $uri");
+        return;
+      }
+      if (mounted) setState(() => _msg = "Menunggu konfirmasi dari Telegram...");
+      await _pollTelegram(pid);
+    } catch (e) {
+      if (mounted) setState(() => _msg = "Gagal hubungkan: $e");
+    } finally {
+      if (mounted) setState(() => _connectingTg = false);
+    }
+  }
+
+  Future<void> _pollTelegram(String pid) async {
+    for (var i = 0; i < 20; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      final st = await _client
+          .from("user_settings")
+          .select("tg_chat_id, telegram_link_token")
+          .eq("user_id", pid)
+          .maybeSingle();
+      if (st == null) continue;
+      final chatId = (st["tg_chat_id"] ?? "").toString().trim();
+      final pending = (st["telegram_link_token"] ?? "").toString();
+      if (chatId.isNotEmpty && pending.isEmpty) {
+        _tg.text = chatId;
+        if (mounted) setState(() => _msg = "Telegram terhubung: $chatId");
+        return;
+      }
+    }
+    if (mounted) setState(() => _msg = "Waktu habis. Pastikan menekan Start di bot Telegram, lalu coba lagi.");
   }
 
   Future<void> _showUpgrade() async {
@@ -446,11 +506,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: _tg,
-                decoration: appDecoration(label: "Telegram Chat ID", hintText: "opsional, sinyal ke chat pribadi"),
+                decoration: appDecoration(label: "Telegram Chat ID", hintText: "otomatis terisi setelah terhubung"),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _busy || _connectingTg ? null : _connectTelegram,
+                  icon: _connectingTg
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: accentMain),
+                        )
+                      : const Icon(Icons.telegram, color: accentMain),
+                  label: const Text("Hubungkan Telegram"),
+                ),
+              ),
+              const SizedBox(height: 8),
               const Text(
-                "Dapatkan Chat ID dengan chat ke bot Telegram lalu kirim /start.",
+                "Tekan tombol di atas, lalu kirim Start di bot Telegram. Chat ID akan terisi otomatis.",
                 style: TextStyle(color: textMuted, fontSize: 11.5),
               ),
               const SizedBox(height: 12),

@@ -204,6 +204,34 @@ function restHeaders(sk) {
   };
 }
 
+async function linkTelegramByToken(env, token, chatId) {
+  const sk = env.SUPABASE_SERVICE_KEY;
+  if (!sk) return false;
+  const find = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_settings?telegram_link_token=eq.${encodeURIComponent(token)}&select=id`,
+    { headers: restHeaders(sk) }
+  );
+  if (!find.ok) return false;
+  let rows;
+  try {
+    rows = await find.json();
+  } catch (e) {
+    return false;
+  }
+  rows = Array.isArray(rows) ? rows : [];
+  const row = rows[0];
+  if (!row || !row.id) return false;
+  const patch = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_settings?id=eq.${row.id}`,
+    {
+      method: "PATCH",
+      headers: restHeaders(sk),
+      body: JSON.stringify({ tg_chat_id: String(chatId), telegram_link_token: null }),
+    }
+  );
+  return patch.ok;
+}
+
 async function telegramWebhook(env, request) {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) return new Response("no token", { status: 503 });
@@ -217,9 +245,19 @@ async function telegramWebhook(env, request) {
   const chatId = msg.chat ? msg.chat.id : null;
   if (!chatId) return new Response("ok", { status: 200 });
   const text = (msg.text || "").toString().trim();
-  const reply = text.toLowerCase().startsWith("/start") || !text
-    ? "Halo! Chat ID Telegram kamu:\n\n<code>" + chatId + "</code>\n\nSalin kode di atas ke kolom <b>Telegram Chat ID</b> di aplikasi BrandBisnis."
-    : "Chat ID Telegram kamu: <code>" + chatId + "</code>\n\nSalin ke kolom <b>Telegram Chat ID</b> di aplikasi BrandBisnis.";
+  const startMatch = text.match(/^\/start(?:\s+(\S+))?/i);
+  const linkToken = startMatch && startMatch[1] ? startMatch[1].trim() : "";
+  let reply;
+  if (linkToken) {
+    const ok = await linkTelegramByToken(env, linkToken, chatId);
+    reply = ok
+      ? "Berhasil! Akun Telegram kamu sudah terhubung ke BrandBisnis.\n\nChat ID: <code>" + chatId + "</code>"
+      : "Kode koneksi tidak valid atau sudah dipakai. Buka aplikasi BrandBisnis lalu tekan <b>Hubungkan Telegram</b> lagi.";
+  } else {
+    reply = text.toLowerCase().startsWith("/start") || !text
+      ? "Halo! Chat ID Telegram kamu:\n\n<code>" + chatId + "</code>\n\nSalin kode di atas ke kolom <b>Telegram Chat ID</b> di aplikasi BrandBisnis."
+      : "Chat ID Telegram kamu: <code>" + chatId + "</code>\n\nSalin ke kolom <b>Telegram Chat ID</b> di aplikasi BrandBisnis.";
+  }
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

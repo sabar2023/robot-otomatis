@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme.dart';
+import 'admin_content_screen.dart';
+import 'admin_tickets_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -27,6 +29,8 @@ class _AdminScreenState extends State<AdminScreen> {
     "trading_sl_pct",
     "trading_tp_pct",
     "trading_leverage",
+    "feature_premium_active",
+    "feature_free_active",
   ];
 
   @override
@@ -124,7 +128,21 @@ class _AdminScreenState extends State<AdminScreen> {
       return Scaffold(appBar: AppBar(title: const Text("Dashboard Admin")), body: Center(child: Text(_err!, style: const TextStyle(color: textMuted))));
     }
     return Scaffold(
-      appBar: AppBar(title: const Text("Dashboard Admin")),
+      appBar: AppBar(
+        title: const Text("Dashboard Admin"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.support_agent, color: textMuted),
+            tooltip: "Tiket",
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminTicketsScreen())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.article_outlined, color: textMuted),
+            tooltip: "Konten",
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminContentScreen())),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.only(top: 4, bottom: 30),
         children: [
@@ -162,6 +180,10 @@ class _AdminScreenState extends State<AdminScreen> {
                 _field("trading_tp_pct", "TP % default"),
                 const SizedBox(height: 10),
                 _field("trading_leverage", "Leverage default"),
+                const SizedBox(height: 10),
+                _field("feature_premium_active", "Fitur Premium aktif (true/false)"),
+                const SizedBox(height: 10),
+                _field("feature_free_active", "Fitur Free aktif (true/false)"),
                 const SizedBox(height: 14),
                 FilledButton(onPressed: _saveSettings, child: const Text("Simpan Setelan")),
               ],

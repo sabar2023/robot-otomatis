@@ -4,10 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 
 class TicketChatScreen extends StatefulWidget {
-  const TicketChatScreen({super.key, required this.ticketId, required this.subject});
+  const TicketChatScreen({super.key, required this.ticketId, required this.subject, this.isAdmin = false});
 
   final String ticketId;
   final String subject;
+  final bool isAdmin;
 
   @override
   State<TicketChatScreen> createState() => _TicketChatScreenState();
@@ -49,7 +50,7 @@ class _TicketChatScreenState extends State<TicketChatScreen> {
     try {
       await Supabase.instance.client.from("ticket_messages").insert({
         "ticket_id": widget.ticketId,
-        "sender": "user",
+        "sender": widget.isAdmin ? "admin" : "user",
         "message": text,
       });
       _msg.clear();

@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import 'dashboard_screen.dart';
 import 'history_screen.dart';
+import 'menu_screen.dart';
+import 'package_screen.dart';
 import 'reports_screen.dart';
 
 class MainShell extends StatefulWidget {
@@ -29,16 +31,19 @@ class _MainShellState extends State<MainShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _tab, children: const [DashboardScreen(), HistoryScreen(), ReportsScreen()]),
+      body: IndexedStack(
+        index: _tab,
+        children: const [
+          DashboardScreen(),
+          HistoryScreen(),
+          ReportsScreen(),
+          PackageScreen(),
+          MenuScreen(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) {
-          if (i == 3) {
-            Supabase.instance.client.auth.signOut();
-            return;
-          }
-          setState(() => _tab = i);
-        },
+        onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.space_dashboard_outlined),
@@ -56,9 +61,14 @@ class _MainShellState extends State<MainShell> {
             label: "Laporan",
           ),
           NavigationDestination(
-            icon: Icon(Icons.logout_outlined),
-            selectedIcon: Icon(Icons.logout),
-            label: "Keluar",
+            icon: Icon(Icons.workspace_premium_outlined),
+            selectedIcon: Icon(Icons.workspace_premium),
+            label: "Paket",
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu_outlined),
+            selectedIcon: Icon(Icons.menu),
+            label: "Menu",
           ),
         ],
       ),

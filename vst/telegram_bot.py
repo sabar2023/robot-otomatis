@@ -77,7 +77,7 @@ def build_simulation_html(user, mode_label, results):
         mg_pct = user.get("margin_pct") or config.MARGIN_PCT
         margin_line = f"dinamis {float(mg_pct):g}% saldo"
     else:
-        margin_line = f"fixed {config.FIXED_MARGIN:g} {config.MARGIN_COIN}"
+        margin_line = f"fixed {config.FIXED_MARGIN_PCT:g}% saldo"
 
     sl_val = user.get("sl_pct") if manual else None
     tp_val = user.get("tp_pct") if manual else None

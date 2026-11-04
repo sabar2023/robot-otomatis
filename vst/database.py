@@ -157,7 +157,7 @@ def fetch_users():
         return []
     try:
         resp = requests.get(
-            f"{_url()}/rest/v1/user_settings?select=*,users_profile(email,nama)",
+            f"{_url()}/rest/v1/user_settings?select=*,users_profile(id,email,nama,nama_akun,no_hp,role,kyc_status,is_blocked,plan,trial_ends_at)",
             headers=_headers(_service_key()),
             timeout=15,
         )
@@ -184,6 +184,12 @@ def fetch_users():
                     "id": user_id,
                     "email": email,
                     "nama": profile.get("nama") or email,
+                    "nama_akun": profile.get("nama_akun"),
+                    "role": (profile.get("role") or "customer").strip().lower(),
+                    "kyc_status": (profile.get("kyc_status") or "pending").strip().lower(),
+                    "is_blocked": bool(profile.get("is_blocked")),
+                    "plan": (profile.get("plan") or "free_trial").strip().lower(),
+                    "trial_ends_at": profile.get("trial_ends_at"),
                     "api_key": api_key,
                     "secret_key": secret_key,
                     "mode_otomatis": bool(row.get("mode_otomatis")),
@@ -201,6 +207,14 @@ def fetch_users():
     except Exception as exc:
         log.warning("Supabase user_settings gagal: %s", _err_text(exc))
         return []
+
+
+def can_execute_live(user):
+    if user.get("role") == "admin":
+        return True
+    if user.get("is_blocked"):
+        return False
+    return (user.get("plan") or "free_trial").strip().lower() == "premium"
 
 
 def auto_enabled():

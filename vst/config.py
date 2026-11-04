@@ -79,7 +79,7 @@ LEVERAGE_MAX = int(os.getenv("VST_LEVERAGE_MAX", "20"))
 LEVERAGE_DEFAULT = 5
 EXEC_MODE = os.getenv("VST_EXEC_MODE", "demo").strip().lower()
 MARGIN_PCT = float(os.getenv("VST_MARGIN_PCT", "10"))
-FIXED_MARGIN = float(os.getenv("VST_FIXED_MARGIN", "10000"))
+FIXED_MARGIN_PCT = float(os.getenv("VST_FIXED_MARGIN_PCT", "10"))
 MARGIN_COIN = os.getenv("VST_MARGIN_COIN", "USDT" if EXEC_MODE == "real" else "VST")
 MIN_ORDER_USDT = float(os.getenv("VST_MIN_ORDER_USDT", "10"))
 SIMULATED_NOTIONAL_USDT = float(os.getenv("VST_SIM_NOTIONAL_USDT", "100"))

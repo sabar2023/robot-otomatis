@@ -67,7 +67,7 @@ def compute_size(exchange, symbol, entry, levels):
     if levels.get("margin_mode") == "pct":
         margin_used = free * levels["margin_pct"] / 100.0
     else:
-        margin_used = min(config.FIXED_MARGIN, free)
+        margin_used = min(free * config.FIXED_MARGIN_PCT / 100.0, free)
     notional = margin_used * levels["leverage"]
     amount = float(exchange.amount_to_precision(symbol, notional / entry))
     limits = exchange.market(symbol)["limits"]

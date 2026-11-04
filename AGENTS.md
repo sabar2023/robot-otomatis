@@ -54,14 +54,25 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   `mode_otomatis`, `mode_manual`, `margin_mode`, `koin_pilihan[]`,
   `margin_persen`, `leverage`, `tp_persen`, `sl_persen`), `trade_history`
   (riwayat + PnL per user, `status` open/simulated). `margin_mode` `fixed`
-  (default) = margin per order tetap `VST_FIXED_MARGIN` (10.000 VST);
-  `margin_mode` `pct` = margin per order `margin_persen`% dari saldo bebas
-  terkini (compounding dinamis). `mode_manual=false` (default) = mode Otomatis:
+  (default) = margin per order tetap `VST_FIXED_MARGIN_PCT` (10%) dari saldo
+  bebas terkini; `margin_mode` `pct` = margin per order `margin_persen`% dari
+  saldo bebas terkini (compounding dinamis). `mode_manual=false` (default) = mode Otomatis:
   engine mengabaikan `koin_pilihan`/`leverage`/`margin_persen`/`tp_persen`/
   `sl_persen` dan memakai default (top-5 volume, leverage/SL/TP/margin dari
   `config`); `mode_manual=true` = mode Manual: semua nilai manual dipakai.
   RLS aktif; engine baca/lintas-user pakai service key, user Flutter baca data
   sendiri via auth. User owner pertama sudah diseed (sabarberkah2017@gmail.com).
+  Fondasi SaaS (belum di-migrasi sampai SQL dijalankan manual): kolom tambahan
+  `users_profile` (`nama_akun`, `role`, `kyc_status`, `ktp_image_url`, `selfie_image_url`,
+  `is_blocked`, `plan`, `trial_ends_at`) dan tabel `subscriptions`, `payments`
+  (Duitku), `support_tickets`, `ticket_messages`, `app_versions`, `guides`,
+  `admin_settings` (setting sistem/control plane). Engine memakai
+  `database.can_execute_live(user)` (admin/premium aktif & tidak diblokir) untuk
+  mengizinkan live; trial/bebas = sinyal saja (simulasi). Migration:
+  `docs/migration-saas-foundation.sql`. Tanpa migration, `fetch_users` gagal ke
+  fallback owner dengan warning `42703`. Migration sudah diterapkan ke produksi
+  (via Management API + `SUPABASE_PAT`); owner diset role=admin, plan=premium,
+  kyc=verified agar tetap bisa live order.
 
 ## Aturan Proyek
 

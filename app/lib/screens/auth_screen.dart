@@ -14,6 +14,9 @@ class _AuthScreenState extends State<AuthScreen> {
   final _auth = Supabase.instance.client.auth;
   final _email = TextEditingController();
   final _pass = TextEditingController();
+  final _nama = TextEditingController();
+  final _akun = TextEditingController();
+  final _hp = TextEditingController();
   bool _register = false;
   bool _busy = false;
   String? _error;
@@ -25,7 +28,20 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (_register) {
-        await _auth.signUp(email: _email.text.trim(), password: _pass.text);
+        if (_nama.text.trim().isEmpty || _akun.text.trim().isEmpty || _hp.text.trim().isEmpty) {
+          if (mounted) setState(() => _error = "Lengkapi nama lengkap, nama akun, dan no HP.");
+          if (mounted) setState(() => _busy = false);
+          return;
+        }
+        await _auth.signUp(
+          email: _email.text.trim(),
+          password: _pass.text,
+          data: {
+            "nama_lengkap": _nama.text.trim(),
+            "nama_akun": _akun.text.trim(),
+            "no_hp": _hp.text.trim(),
+          },
+        );
         if (!mounted) return;
         _register = false;
         _error = "Akun dibuat. Silakan masuk dengan email dan kata sandi.";
@@ -79,6 +95,27 @@ class _AuthScreenState extends State<AuthScreen> {
                           textInputAction: TextInputAction.next,
                           decoration: appDecoration(label: "Email", hintText: "email@contoh.com"),
                         ),
+                        if (_register) ...[
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _nama,
+                            textInputAction: TextInputAction.next,
+                            decoration: appDecoration(label: "Nama Lengkap (sesuai KTP)"),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _akun,
+                            textInputAction: TextInputAction.next,
+                            decoration: appDecoration(label: "Nama Akun"),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _hp,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                            decoration: appDecoration(label: "No HP"),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         TextField(
                           controller: _pass,
@@ -126,6 +163,9 @@ class _AuthScreenState extends State<AuthScreen> {
   void dispose() {
     _email.dispose();
     _pass.dispose();
+    _nama.dispose();
+    _akun.dispose();
+    _hp.dispose();
     super.dispose();
   }
 }

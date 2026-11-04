@@ -281,13 +281,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text(
                 _marginDynamic
                     ? "Margin dihitung dinamis dari saldo terkini (compounding)."
-                    : "Margin tetap 10.000 VST per order (statis, tidak ikut naik).",
+                    : "Margin tetap 10% dari saldo terkini per order.",
                 style: const TextStyle(color: textMuted, fontSize: 12.5),
               ),
               const SizedBox(height: 12),
               SegmentedButton<bool>(
                 segments: const [
-                  ButtonSegment(value: false, label: Text("Fixed 10.000"), icon: Icon(Icons.lock_outline)),
+                  ButtonSegment(value: false, label: Text("Fixed 10%"), icon: Icon(Icons.lock_outline)),
                   ButtonSegment(value: true, label: Text("Dinamis %"), icon: Icon(Icons.trending_up)),
                 ],
                 selected: <bool>{_marginDynamic},

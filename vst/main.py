@@ -36,6 +36,12 @@ def owner_user():
         "id": None,
         "email": "owner",
         "nama": "Owner",
+        "nama_akun": "owner",
+        "role": "admin",
+        "kyc_status": "verified",
+        "is_blocked": False,
+        "plan": "premium",
+        "trial_ends_at": None,
         "api_key": config.BINGX_API_KEY,
         "secret_key": config.BINGX_SECRET_KEY,
         "mode_otomatis": True,
@@ -125,6 +131,9 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
     execute_live = live and auto
     if live and not auto:
         log.info("Mode otomatis user / ro_config.auto_trading nonaktif - eksekusi live dilewati (simulasi).")
+    if execute_live and not database.can_execute_live(user):
+        log.info("Akses live dibatasi (paket %s) - eksekusi live dilewati (simulasi, sinyal saja).", user.get("plan"))
+        execute_live = False
 
     manual = bool(user.get("mode_manual"))
     margin_mode = (user.get("margin_mode") or "fixed").strip().lower()
@@ -279,12 +288,11 @@ def main():
         mode_label = "LIVE REAL"
     log.info("=== %s | %s | mode: %s | lingkungan: %s ===", config.PRODUCT_NAME, config.TIMEFRAME_LABEL, mode_label, env_label)
     log.info(
-        "Scan tiap %d menit | leverage %d-%dx | margin fixed %g %s / dinamis %g%% saldo | default SL/TP %s",
+        "Scan tiap %d menit | leverage %d-%dx | margin fixed %g%% saldo / dinamis %g%% saldo | default SL/TP %s",
         config.SCAN_INTERVAL_MINUTES,
         config.LEVERAGE_MIN,
         config.LEVERAGE_MAX,
-        config.FIXED_MARGIN,
-        config.MARGIN_COIN,
+        config.FIXED_MARGIN_PCT,
         config.MARGIN_PCT,
         (
             f"{config.SL_PCT_DEFAULT:.1f}%/{config.TP_PCT_DEFAULT:.1f}%"

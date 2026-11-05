@@ -208,7 +208,7 @@ async function linkTelegramByToken(env, token, chatId) {
   const sk = env.SUPABASE_SERVICE_KEY;
   if (!sk) return false;
   const find = await fetch(
-    `${SUPABASE_URL}/rest/v1/user_settings?telegram_link_token=eq.${encodeURIComponent(token)}&select=id`,
+    `${SUPABASE_URL}/rest/v1/user_settings?telegram_link_token=eq.${encodeURIComponent(token)}&select=user_id`,
     { headers: restHeaders(sk) }
   );
   if (!find.ok) return false;
@@ -220,9 +220,9 @@ async function linkTelegramByToken(env, token, chatId) {
   }
   rows = Array.isArray(rows) ? rows : [];
   const row = rows[0];
-  if (!row || !row.id) return false;
+  if (!row || !row.user_id) return false;
   const patch = await fetch(
-    `${SUPABASE_URL}/rest/v1/user_settings?id=eq.${row.id}`,
+    `${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${row.user_id}`,
     {
       method: "PATCH",
       headers: restHeaders(sk),
@@ -306,10 +306,13 @@ async function adminLoginAs(env, request) {
   }
   const email = String(body.email || "").trim();
   if (!email) return { status: 400, body: { error: "email_required" } };
+  const redirectTo = String(body.redirect_to || "").trim();
+  const payload = { type: "magiclink", email };
+  if (redirectTo) payload.options = { redirect_to: redirectTo };
   const resp = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
     method: "POST",
     headers: restHeaders(sk),
-    body: JSON.stringify({ type: "magiclink", email }),
+    body: JSON.stringify(payload),
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || !data.action_link) {
@@ -349,6 +352,57 @@ async function adminSetPassword(env, request) {
     };
   }
   return { status: 200, body: { ok: true } };
+}
+
+async function telegramBroadcast(env, request) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) return { status: auth.status, body: auth.body };
+  const sk = env.SUPABASE_SERVICE_KEY;
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!sk || !token) return { status: 500, body: { error: "config_missing" } };
+  let body = {};
+  try {
+    body = await request.json();
+  } catch (e) {
+    body = {};
+  }
+  const message = String(body.message || "").trim();
+  if (!message) return { status: 400, body: { error: "message_required" } };
+  const testChat = String(body.chat_id || "").trim();
+  if (testChat) {
+    const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: testChat, text: message, parse_mode: "HTML" }),
+    });
+    return { status: t.ok ? 200 : 502, body: { ok: t.ok, sent: t.ok ? 1 : 0 } };
+  }
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_settings?tg_chat_id=not.is.null&select=tg_chat_id`,
+    { headers: restHeaders(sk) }
+  );
+  const rows = await resp.json().catch(() => []);
+  const ids = Array.from(new Set((Array.isArray(rows) ? rows : []).map((r) => (r.tg_chat_id || "").toString().trim()).filter(Boolean)));
+  let sent = 0;
+  let failed = 0;
+  const chunk = 25;
+  for (let i = 0; i < ids.length; i += chunk) {
+    const slice = ids.slice(i, i + chunk);
+    const results = await Promise.all(
+      slice.map((cid) =>
+        fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: cid, text: message, parse_mode: "HTML" }),
+        }).then((r) => r.ok).catch(() => false)
+      )
+    );
+    for (const ok of results) {
+      if (ok) sent += 1;
+      else failed += 1;
+    }
+  }
+  return { status: 200, body: { ok: true, total: ids.length, sent, failed } };
 }
 
 async function createPayment(env, request) {
@@ -541,6 +595,10 @@ export default {
     }
     if (url.pathname === "/admin/set-password" && request.method === "POST") {
       const result = await adminSetPassword(env, request);
+      return Response.json(result.body, { status: result.status, headers: cors });
+    }
+    if (url.pathname === "/admin/broadcast" && request.method === "POST") {
+      const result = await telegramBroadcast(env, request);
       return Response.json(result.body, { status: result.status, headers: cors });
     }
     if (url.pathname === "/payment/callback") {

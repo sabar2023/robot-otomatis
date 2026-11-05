@@ -26,6 +26,8 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _users = const [];
   Map<String, TextEditingController> _setCtrls = {};
   Map<String, dynamic> _settings = {};
+  final _bcCtrl = TextEditingController();
+  bool _bcBusy = false;
 
   final _settingKeys = [
     "trading_margin_mode",
@@ -115,7 +117,7 @@ class _AdminScreenState extends State<AdminScreen> {
           .post(
             Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/login-as"),
             headers: {"Authorization": "Bearer $token", "Content-Type": "application/json"},
-            body: jsonEncode({"email": email}),
+            body: jsonEncode({"email": email, "redirect_to": Uri.base.origin}),
           )
           .timeout(const Duration(seconds: 30));
       final body = jsonDecode(resp.body);
@@ -134,6 +136,55 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
       }
+    }
+  }
+
+  Future<void> _broadcast(bool testOnly) async {
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final msg = _bcCtrl.text.trim();
+    if (token == null || msg.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Pesan tidak boleh kosong.")));
+      return;
+    }
+    setState(() => _bcBusy = true);
+    try {
+      Map<String, dynamic> payload = {"message": msg};
+      if (testOnly) {
+        final st = await Supabase.instance.client
+            .from("user_settings")
+            .select("tg_chat_id")
+            .not("tg_chat_id", "is", null)
+            .limit(1)
+            .maybeSingle();
+        final chatId = (st?["tg_chat_id"] ?? "").toString().trim();
+        if (chatId.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Belum ada chat ID. Hubungkan Telegram dulu.")));
+          }
+          return;
+        }
+        payload["chat_id"] = chatId;
+      }
+      final resp = await http
+          .post(
+            Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/broadcast"),
+            headers: {"Authorization": "Bearer $token", "Content-Type": "application/json"},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 120));
+      final body = jsonDecode(resp.body);
+      if (mounted) {
+        final text = resp.statusCode == 200
+            ? (testOnly ? "Tes terkirim." : "Terkirim: ${body["sent"] ?? 0} / ${body["total"] ?? 0}")
+            : "Gagal: ${body["message"] ?? body["error"] ?? "HTTP ${resp.statusCode}"}";
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => _bcBusy = false);
     }
   }
 
@@ -257,6 +308,48 @@ class _AdminScreenState extends State<AdminScreen> {
             child: Text("Manajemen Pengguna", style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           ),
           ..._users.map(_buildUser),
+          const SizedBox(height: 6),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 4),
+            child: Text("Broadcast Telegram", style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          ),
+          panelCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  "Kirim pengumuman ke semua pelanggan yang sudah menghubungkan Telegram.",
+                  style: TextStyle(color: textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _bcCtrl,
+                  maxLines: 4,
+                  decoration: appDecoration(label: "Pesan (HTML didukung)"),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _bcBusy ? null : () => _broadcast(true),
+                        child: const Text("Tes ke Saya"),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _bcBusy ? null : () => _broadcast(false),
+                        child: _bcBusy
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Text("Kirim ke Semua"),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 6),
           const Padding(
             padding: EdgeInsets.fromLTRB(20, 8, 20, 4),

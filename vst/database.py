@@ -201,6 +201,7 @@ def fetch_users():
                     "tp_pct": row.get("tp_persen"),
                     "sl_pct": row.get("sl_persen"),
                     "tg_chat_id": row.get("tg_chat_id"),
+                    "exec_mode": (row.get("exec_mode") or "demo").strip().lower(),
                 }
             )
         return users

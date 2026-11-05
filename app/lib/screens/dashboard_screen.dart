@@ -32,6 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _mode = false;
   bool _manual = false;
   bool _marginDynamic = false;
+  bool _execReal = false;
   bool _premium = false;
   bool _loaded = false;
   bool _busy = false;
@@ -92,6 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _mode = (st["mode_otomatis"] ?? false) as bool;
         _manual = (st["mode_manual"] ?? false) as bool;
         _marginDynamic = (st["margin_mode"] ?? "fixed") == "pct";
+        _execReal = (st["exec_mode"] ?? "demo") == "real";
         final coins = (st["koin_pilihan"] as List?) ?? const [];
         _coins.text = coins.map((e) => e.toString()).join(", ");
         _lev.text = (st["leverage"] ?? 5).toString();
@@ -130,6 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "mode_otomatis": _premium && _mode,
         "mode_manual": _premium && _manual,
         "margin_mode": (_premium && _marginDynamic) ? "pct" : "fixed",
+        "exec_mode": (_premium && _execReal) ? "real" : "demo",
         "koin_pilihan": _coins.text.split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
         "leverage": _clampInt(_lev.text, 5, 20, 5),
         "margin_persen": _clampDouble(_margin.text, 1, 100, 10),
@@ -357,6 +360,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
               }
               setState(() => _mode = v);
             },
+          ),
+        ),
+        panelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text("Mode Eksekusi", style: TextStyle(fontWeight: FontWeight.w700)),
+                  if (!_premium) ...[
+                    const SizedBox(width: 8),
+                    _premiumLock(),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _premium && _execReal
+                    ? "Order live memakai dana real di BingX (USDT)."
+                    : "Order live memakai akun VST demo BingX (tanpa uang asli).",
+                style: const TextStyle(color: textMuted, fontSize: 12.5),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text("VST Demo"), icon: Icon(Icons.science_outlined)),
+                  ButtonSegment(value: true, label: Text("Live Real"), icon: Icon(Icons.currency_exchange)),
+                ],
+                selected: <bool>{_premium ? _execReal : false},
+                onSelectionChanged: (s) {
+                  final wantReal = s.first;
+                  if (wantReal && !_premium) {
+                    _showUpgrade();
+                    return;
+                  }
+                  setState(() => _execReal = wantReal);
+                },
+              ),
+            ],
           ),
         ),
         panelCard(

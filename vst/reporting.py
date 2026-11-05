@@ -7,7 +7,9 @@ import database
 import telegram_bot
 
 
-def _coin():
+def _coin(user=None):
+    if user and (user.get("exec_mode") or "demo").strip().lower() == "real":
+        return "USDT"
     return config.MARGIN_COIN
 
 
@@ -68,7 +70,7 @@ def _roi_pct(pnl, margin):
     return pnl / margin * 100.0
 
 
-def trade_close_message(row):
+def trade_close_message(row, user=None):
     pnl = row.get("pnl")
     try:
         pnl = float(pnl) if pnl is not None else None
@@ -90,7 +92,7 @@ def trade_close_message(row):
     if tp_pct is not None:
         tp_txt += f" ({tp_pct:+.2f}%)"
     roi = _roi_pct(pnl, row.get("margin_used"))
-    pnl_txt = f"&#128176; PnL: <b>{_fmt_money(pnl)} {_coin()}</b>"
+    pnl_txt = f"&#128176; PnL: <b>{_fmt_money(pnl)} {_coin(user)}</b>"
     if roi is not None:
         pnl_txt += f" (<b>{roi:+.2f}%</b> dari margin)"
     lines = [
@@ -101,7 +103,7 @@ def trade_close_message(row):
     margin_used = row.get("margin_used")
     leverage = row.get("leverage")
     if margin_used is not None:
-        info = f"Margin: {_fmt_price(margin_used)} {_coin()}"
+        info = f"Margin: {_fmt_price(margin_used)} {_coin(user)}"
         if leverage is not None:
             info += f" | Leverage: {leverage}x"
         lines.append(info)
@@ -113,7 +115,7 @@ def trade_close_message(row):
 
 
 def send_trade_close(row, user):
-    msg = trade_close_message(row)
+    msg = trade_close_message(row, user)
     if not msg:
         return
     telegram_bot.send_message(msg)
@@ -153,8 +155,8 @@ def period_message(user, label, stats):
         f"&#128100; User: {user.get('nama') or user.get('email')}",
         f"Trade: <b>{stats['n']}</b> | Win: {stats['wins']} | Loss: {stats['losses']}",
         f"Winrate: <b>{stats['winrate']:.1f}%</b>",
-        f"Total PnL: <b>{_fmt_money(stats['total'])} {_coin()}</b>",
-        f"Rata-rata/trade: {_fmt_money(stats['avg'])} {_coin()}",
+        f"Total PnL: <b>{_fmt_money(stats['total'])} {_coin(user)}</b>",
+        f"Rata-rata/trade: {_fmt_money(stats['avg'])} {_coin(user)}",
         f"Profit factor: {stats['pf']:.2f}",
         f"Terbaik: {_fmt_money(stats['best'])} | Terburuk: {_fmt_money(stats['worst'])}",
     ]
@@ -206,9 +208,9 @@ def daily_message(user, closed, stats, opens, entries):
     ]
     if stats:
         lines.append(f"Win {stats['wins']} / Loss {stats['losses']} | Winrate {stats['winrate']:.0f}%")
-        lines.append(f"PnL: <b>{_fmt_money(stats['total'])} {_coin()}</b>")
+        lines.append(f"PnL: <b>{_fmt_money(stats['total'])} {_coin(user)}</b>")
     else:
-        lines.append(f"PnL: <b>+0.00 {_coin()}</b>")
+        lines.append(f"PnL: <b>+0.00 {_coin(user)}</b>")
     return "\n".join(lines)
 
 

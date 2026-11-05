@@ -14,7 +14,9 @@ def fmt_price(value):
 
 def build_alert_html(result, levels, execution, user=None):
     is_long = levels["direction"] == "LONG"
-    if execution["mode"] == "live" and config.EXEC_MODE == "real":
+    exec_mode = (execution.get("exec_mode") or "demo").strip().lower()
+    margin_coin = execution.get("margin_coin") or ("USDT" if exec_mode == "real" else "VST")
+    if execution["mode"] == "live" and exec_mode == "real":
         mode_line = "&#128225; <b>LIVE (BingX akun real, USDT)</b>"
     elif execution["mode"] == "live":
         mode_line = "&#128225; <b>LIVE VST</b> (demo BingX)"
@@ -33,8 +35,8 @@ def build_alert_html(result, levels, execution, user=None):
     notional = execution.get("notional")
     margin_used = execution.get("margin_used")
     lev_line = f"&#128737; <b>LEVERAGE</b> : {levels['leverage']}x"
-    size_line = f"&#128176; <b>SIZE</b>     : {notional:,.0f} USDT notional | <b>MARGIN</b>: {margin_used:,.2f} {config.MARGIN_COIN} ({levels['margin_pct']:g}%)" if notional else (
-        f"&#128176; <b>MARGIN</b>   : {config.MARGIN_COIN} terisolasi"
+    size_line = f"&#128176; <b>SIZE</b>     : {notional:,.0f} USDT notional | <b>MARGIN</b>: {margin_used:,.2f} {margin_coin} ({levels['margin_pct']:g}%)" if notional else (
+        f"&#128176; <b>MARGIN</b>   : {margin_coin} terisolasi"
     )
 
     tp1_line = None

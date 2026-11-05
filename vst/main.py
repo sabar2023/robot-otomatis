@@ -149,7 +149,8 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
     )
     levels["margin_mode"] = margin_mode
     credentials = {"api_key": user["api_key"], "secret_key": user["secret_key"]}
-    execution = executor.execute(levels, live=execute_live, data_source_id=src, symbol=symbol, credentials=credentials)
+    exec_mode = (user.get("exec_mode") or "demo").strip().lower()
+    execution = executor.execute(levels, live=execute_live, data_source_id=src, symbol=symbol, credentials=credentials, exec_mode=exec_mode)
     database.log_execution(symbol, execution["mode"], levels, execution)
     database.log_trade(user["id"], symbol, levels, execution)
     log.info("Eksekusi [%s]: %s", execution["mode"], execution["detail"])

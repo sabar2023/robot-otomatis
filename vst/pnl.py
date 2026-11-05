@@ -68,7 +68,7 @@ def sync_closed_trades(user):
     if not (user["api_key"] and user["secret_key"]):
         return 0
     try:
-        exchange = executor.build_trading_exchange(user["api_key"], user["secret_key"])
+        exchange = executor.build_trading_exchange(user["api_key"], user["secret_key"], user.get("exec_mode"))
     except Exception as exc:
         log.warning("Sync PnL %s - exchange gagal: %s", user["email"], str(exc).splitlines()[0][:120])
         return 0

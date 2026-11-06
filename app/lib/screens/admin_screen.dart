@@ -9,6 +9,13 @@ import '../theme.dart';
 import 'admin_content_screen.dart';
 import 'admin_tickets_screen.dart';
 
+String _appBaseUrl() {
+  final b = Uri.base;
+  var path = b.path;
+  if (!path.endsWith('/')) path = '$path/';
+  return '${b.scheme}://${b.host}${b.hasPort ? ':${b.port}' : ''}$path';
+}
+
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
 
@@ -117,7 +124,7 @@ class _AdminScreenState extends State<AdminScreen> {
           .post(
             Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/login-as"),
             headers: {"Authorization": "Bearer $token", "Content-Type": "application/json"},
-            body: jsonEncode({"email": email, "redirect_to": Uri.base.origin}),
+            body: jsonEncode({"email": email, "redirect_to": _appBaseUrl()}),
           )
           .timeout(const Duration(seconds: 30));
       final body = jsonDecode(resp.body);

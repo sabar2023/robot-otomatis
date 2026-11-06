@@ -8,6 +8,15 @@ on:
     paths:
       - "app/**"
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   build-web:
     runs-on: ubuntu-latest
@@ -22,13 +31,45 @@ jobs:
         working-directory: app
         run: flutter pub get
 
-      - name: Build Web
+      - name: Build Web (root, untuk preview)
         working-directory: app
         run: flutter build web --release
 
-      - name: Upload Web
+      - name: Simpan build root
+        run: cp -r app/build/web app/build/web_root
+
+      - name: Build Web (subpath, untuk GitHub Pages)
+        working-directory: app
+        run: flutter build web --release --base-href /robot-otomatis/
+
+      - name: Simpan build pages
+        run: cp -r app/build/web app/build/web_pages
+
+      - name: Upload Web (preview)
         uses: actions/upload-artifact@v4
         with:
           name: brandbisnis-app-web
-          path: app/build/web
+          path: app/build/web_root
           retention-days: 30
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/build/web_pages
+
+  deploy:
+    needs: build-web
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

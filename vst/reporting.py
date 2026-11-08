@@ -7,6 +7,10 @@ import database
 import telegram_bot
 
 
+def _is_admin(user):
+    return (user.get("role") or "").strip().lower() == "admin"
+
+
 def _coin(user=None):
     if user and (user.get("exec_mode") or "demo").strip().lower() == "real":
         return "USDT"
@@ -118,7 +122,8 @@ def send_trade_close(row, user):
     msg = trade_close_message(row, user)
     if not msg:
         return
-    telegram_bot.send_message(msg)
+    if _is_admin(user):
+        telegram_bot.send_message(msg)
     user_chat = (user.get("tg_chat_id") or "").strip()
     if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
         telegram_bot.send_message(msg, chat_id=user_chat)
@@ -173,7 +178,8 @@ def send_period_report(users, label, days):
             continue
         msg = period_message(user, label, stats)
         try:
-            telegram_bot.send_message(msg)
+            if _is_admin(user):
+                telegram_bot.send_message(msg)
             user_chat = (user.get("tg_chat_id") or "").strip()
             if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
                 telegram_bot.send_message(msg, chat_id=user_chat)
@@ -224,7 +230,8 @@ def send_daily_report(users):
         entries = _fetch_rows(user["id"], since=since)
         msg = daily_message(user, closed, stats, opens, entries)
         try:
-            telegram_bot.send_message(msg)
+            if _is_admin(user):
+                telegram_bot.send_message(msg)
             user_chat = (user.get("tg_chat_id") or "").strip()
             if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
                 telegram_bot.send_message(msg, chat_id=user_chat)

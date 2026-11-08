@@ -85,7 +85,7 @@ def _daily_frame(fetch, symbol):
     return market_data.closed_candles(raw)
 
 
-def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_alerts=True, settings=None):
+def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_alerts=True, settings=None, sent_chats=None):
     now = dt.datetime.now(dt.timezone.utc)
     log.info("Memindai %s ...", symbol)
     raw, src = fetch(symbol, config.TIMEFRAME, config.CANDLE_LIMIT)
@@ -158,18 +158,27 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
     if send_alerts:
         html = telegram_bot.build_alert_html(result, levels, execution, user)
         user_chat = (user.get("tg_chat_id") or "").strip()
+        sent_chats = sent_chats if sent_chats is not None else set()
         try:
             sent_any = False
+            targets = []
             if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
-                if telegram_bot.send_message(html, chat_id=user_chat) is not None:
-                    sent_any = True
-                    log.info("Sinyal dikirim ke chat pribadi %s.", user["email"])
+                targets.append(user_chat)
             if user.get("role") == "admin":
-                if telegram_bot.send_message(html) is not None:
+                targets.append(config.TELEGRAM_CHAT_ID)
+            for chat_id in targets:
+                key = (chat_id.split("@")[0], symbol)
+                if key in sent_chats:
+                    continue
+                if telegram_bot.send_message(html, chat_id=chat_id) is not None:
+                    sent_chats.add(key)
                     sent_any = True
-                    log.info("Sinyal admin dikirim ke grup utama (monitoring).")
+                    if chat_id == config.TELEGRAM_CHAT_ID:
+                        log.info("Sinyal admin dikirim ke grup utama (monitoring).")
+                    else:
+                        log.info("Sinyal dikirim ke chat pribadi %s.", user["email"])
             if not sent_any:
-                log.info("User tanpa chat pribadi - sinyal hanya dicatat (in-app).")
+                log.info("Deduplikasi/personal tidak tersedia - sinyal hanya dicatat (in-app).")
         except Exception as exc:
             log.error("Gagal kirim alert Telegram: %s", _one_line(exc))
     return {
@@ -221,7 +230,9 @@ def simulate_once(email):
             results.append({"symbol": symbol, "signal": False, "direction": None, "error": _one_line(exc)})
 
     html = telegram_bot.build_simulation_html(user, mode_label, results)
-    sent = telegram_bot.send_message(html)
+    sent = None
+    if user.get("role") == "admin":
+        sent = telegram_bot.send_message(html)
     user_chat = (user.get("tg_chat_id") or "").strip()
     if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
         telegram_bot.send_message(html, chat_id=user_chat)
@@ -240,6 +251,8 @@ def scan_once(live, only_email=None):
     settings = database.fetch_settings()
     watch_cache = {}
     daily_cache = {}
+    sent_chats = set()
+    users = sorted(users, key=lambda u: 0 if u.get("role") == "admin" else 1)
     for user in users:
         access = database.signal_access(user, settings)
         if access in ("blocked", "disabled", "expired"):
@@ -257,7 +270,7 @@ def scan_once(live, only_email=None):
             coins = watch_cache["default"]
         for symbol in coins:
             try:
-                scan_symbol(live, fetch, user, symbol, auto_global, daily_cache, settings=settings)
+                scan_symbol(live, fetch, user, symbol, auto_global, daily_cache, settings=settings, sent_chats=sent_chats)
             except Exception as exc:
                 log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
     closed = pnl.sync_all(users, live)

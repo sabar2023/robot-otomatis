@@ -253,31 +253,38 @@ def scan_once(live, only_email=None):
     daily_cache = {}
     sent_chats = set()
     users = sorted(users, key=lambda u: 0 if u.get("role") == "admin" else 1)
-    for user in users:
-        access = database.signal_access(user, settings)
-        if access in ("blocked", "disabled", "expired"):
-            log.info("=== User: %s (%s) | akses %s - dilewati (sinyal dikunci) ===", user["nama"], user["email"], access)
-            continue
-        mode_label = "manual" if user.get("mode_manual") else "otomatis"
-        log.info("=== User: %s (%s) | akses: %s | otomatis: %s | mode: %s ===", user["nama"], user["email"], access, user["mode_otomatis"], mode_label)
-        if user.get("mode_manual") and user["coins"]:
-            coins = user["coins"]
-            log.info("Watchlist manual: %s", ", ".join(coins))
-        else:
-            if "default" not in watch_cache:
-                watch_cache["default"], watch_src = watchlist.default_watchlist(chain)
-                log.info("Watchlist default (top %d volume, %s): %s", config.WATCHLIST_SIZE, watch_src, ", ".join(watch_cache["default"]))
-            coins = watch_cache["default"]
-        for symbol in coins:
+    try:
+        for user in users:
+            access = database.signal_access(user, settings)
+            if access in ("blocked", "disabled", "expired"):
+                log.info("=== User: %s (%s) | akses %s - dilewati (sinyal dikunci) ===", user["nama"], user["email"], access)
+                continue
+            mode_label = "manual" if user.get("mode_manual") else "otomatis"
+            log.info("=== User: %s (%s) | akses: %s | otomatis: %s | mode: %s ===", user["nama"], user["email"], access, user["mode_otomatis"], mode_label)
+            if user.get("mode_manual") and user["coins"]:
+                coins = user["coins"]
+                log.info("Watchlist manual: %s", ", ".join(coins))
+            else:
+                if "default" not in watch_cache:
+                    watch_cache["default"], watch_src = watchlist.default_watchlist(chain)
+                    log.info("Watchlist default (top %d volume, %s): %s", config.WATCHLIST_SIZE, watch_src, ", ".join(watch_cache["default"]))
+                coins = watch_cache["default"]
+            for symbol in coins:
+                try:
+                    scan_symbol(live, fetch, user, symbol, auto_global, daily_cache, settings=settings, sent_chats=sent_chats)
+                except Exception as exc:
+                    log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
+        closed = pnl.sync_all(users, live)
+        if closed:
+            log.info("PnL: %d trade dinyatakan tertutup.", closed)
+        if live:
+            reporting.send_due_reports(users, settings)
+    finally:
+        if live:
             try:
-                scan_symbol(live, fetch, user, symbol, auto_global, daily_cache, settings=settings, sent_chats=sent_chats)
+                executor.keep_credentials_active(users)
             except Exception as exc:
-                log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
-    closed = pnl.sync_all(users, live)
-    if closed:
-        log.info("PnL: %d trade dinyatakan tertutup.", closed)
-    if live:
-        reporting.send_due_reports(users)
+                log.warning("Keep-alive kredensial gagal: %s", _one_line(exc))
     return len(users)
 
 
@@ -307,6 +314,8 @@ def main():
     parser.add_argument("--user", metavar="EMAIL", help="Hanya pindai user dengan email ini")
     parser.add_argument("--simulate", action="store_true", help="Jalankan simulasi test user dan kirim ringkasan ke Telegram")
     parser.add_argument("--test-telegram", action="store_true", help="Kirim pesan tes untuk validasi kredensial Telegram")
+    parser.add_argument("--send-reports", metavar="PERIODS", help="Kirim laporan manual: daily,weekly,monthly,yearly atau all (dipisah koma)")
+    parser.add_argument("--keep-alive", action="store_true", help="Cek/keep-alive pasangan API key BingX (tanpa order), lalu keluar")
     args = parser.parse_args()
 
     setup_logging()
@@ -334,12 +343,36 @@ def main():
         ),
     )
 
+    if args.keep_alive:
+        if executor.keep_credentials_active():
+            log.info("Keep-alive selesai tanpa mengirim order.")
+            sys.exit(0)
+        log.error("Tidak ada pasangan API key BingX yang berhasil diverifikasi.")
+        sys.exit(1)
+
     if args.test_telegram:
         if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
             log.error("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID kosong. Isi .env dulu.")
             sys.exit(1)
         telegram_bot.send_test_message(live)
         log.info("Pesan tes Telegram terkirim. Kredensial valid.")
+        sys.exit(0)
+
+    if args.send_reports:
+        if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
+            log.error("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID kosong. Isi .env dulu.")
+            sys.exit(1)
+        raw = [p.strip().lower() for p in args.send_reports.split(",") if p.strip()]
+        periods = ["daily", "weekly", "monthly", "yearly"] if "all" in raw else raw
+        valid = {"daily", "weekly", "monthly", "yearly"}
+        periods = [p for p in periods if p in valid]
+        if not periods:
+            log.error("Periode tidak valid. Gunakan: daily,weekly,monthly,yearly atau all")
+            sys.exit(1)
+        users = resolve_users(args.user)
+        settings = database.fetch_settings()
+        reporting.send_manual_reports(users, periods, settings)
+        log.info("Laporan manual terkirim: %s", ", ".join(periods))
         sys.exit(0)
 
     if args.simulate:

@@ -37,6 +37,8 @@ jobs:
           VST_TIMEFRAME: ${{ vars.VST_TIMEFRAME || '1h' }}
           BINGX_API_KEY: ${{ secrets.BINGX_API_KEY }}
           BINGX_SECRET_KEY: ${{ secrets.BINGX_SECRET_KEY }}
+          BINGX_BACKUP_API_KEY: ${{ secrets.BINGX_BACKUP_API_KEY }}
+          BINGX_BACKUP_SECRET_KEY: ${{ secrets.BINGX_BACKUP_SECRET_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://jklbczruvbxscpwxxfud.supabase.co' }}

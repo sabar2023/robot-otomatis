@@ -14,11 +14,11 @@ def _is_admin(user):
 def _coin(user=None):
     if user and (user.get("exec_mode") or "demo").strip().lower() == "real":
         return "USDT"
-    return config.MARGIN_COIN
+    return getattr(config, "MARGIN_COIN", "VST")
 
 
 def _fetch_closed(user_id, since=None, until=None):
-    cols = "id,symbol,direction,entry_price,sl_price,tp_price,pnl,closed_at"
+    cols = "id,symbol,direction,entry_price,sl_price,tp_price,margin_used,leverage,pnl,closed_at"
     url = f"{database._url()}/rest/v1/trade_history?select={cols}&user_id=eq.{user_id}&status=eq.closed"
     if since:
         url += f"&closed_at=gte.{since}"
@@ -154,39 +154,6 @@ def _aggregate(rows):
     }
 
 
-def period_message(user, label, stats):
-    lines = [
-        f"&#128202; <b>LAPORAN {label.upper()}</b>",
-        f"&#128100; User: {user.get('nama') or user.get('email')}",
-        f"Trade: <b>{stats['n']}</b> | Win: {stats['wins']} | Loss: {stats['losses']}",
-        f"Winrate: <b>{stats['winrate']:.1f}%</b>",
-        f"Total PnL: <b>{_fmt_money(stats['total'])} {_coin(user)}</b>",
-        f"Rata-rata/trade: {_fmt_money(stats['avg'])} {_coin(user)}",
-        f"Profit factor: {stats['pf']:.2f}",
-        f"Terbaik: {_fmt_money(stats['best'])} | Terburuk: {_fmt_money(stats['worst'])}",
-    ]
-    return "\n".join(lines)
-
-
-def send_period_report(users, label, days):
-    now = dt.datetime.now(dt.timezone.utc)
-    since = (now - dt.timedelta(days=days)).isoformat()
-    for user in users:
-        rows = _fetch_closed(user["id"], since=since)
-        stats = _aggregate(rows)
-        if not stats or stats["n"] == 0:
-            continue
-        msg = period_message(user, label, stats)
-        try:
-            if _is_admin(user):
-                telegram_bot.send_message(msg)
-            user_chat = (user.get("tg_chat_id") or "").strip()
-            if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
-                telegram_bot.send_message(msg, chat_id=user_chat)
-        except Exception:
-            pass
-
-
 def _fetch_rows(user_id, status=None, since=None):
     cols = "id,symbol,direction,status"
     url = f"{database._url()}/rest/v1/trade_history?select={cols}&user_id=eq.{user_id}"
@@ -202,6 +169,20 @@ def _fetch_rows(user_id, status=None, since=None):
         return []
     except Exception:
         return []
+
+
+def period_message(user, label, stats):
+    lines = [
+        f"&#128202; <b>LAPORAN {label.upper()}</b>",
+        f"&#128100; User: {user.get('nama') or user.get('email')}",
+        f"Trade: <b>{stats['n']}</b> | Win: {stats['wins']} | Loss: {stats['losses']}",
+        f"Winrate: <b>{stats['winrate']:.1f}%</b>",
+        f"Total PnL: <b>{_fmt_money(stats['total'])} {_coin(user)}</b>",
+        f"Rata-rata/trade: {_fmt_money(stats['avg'])} {_coin(user)}",
+        f"Profit factor: {stats['pf']:.2f}",
+        f"Terbaik: {_fmt_money(stats['best'])} | Terburuk: {_fmt_money(stats['worst'])}",
+    ]
+    return "\n".join(lines)
 
 
 def daily_message(user, closed, stats, opens, entries):
@@ -220,7 +201,33 @@ def daily_message(user, closed, stats, opens, entries):
     return "\n".join(lines)
 
 
-def send_daily_report(users):
+def report_mode(settings, period):
+    val = str((settings or {}).get(f"report_{period}") or "auto").strip().lower()
+    if val in ("off", "disabled", "mati", "false", "0", "no"):
+        return "off"
+    if val in ("manual",):
+        return "manual"
+    return "auto"
+
+
+def report_enabled(settings, period):
+    return report_mode(settings, period) != "off"
+
+
+def _send_to_user(user, msg):
+    try:
+        if _is_admin(user):
+            telegram_bot.send_message(msg)
+        user_chat = (user.get("tg_chat_id") or "").strip()
+        if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
+            telegram_bot.send_message(msg, chat_id=user_chat)
+    except Exception:
+        pass
+
+
+def send_daily_report(users, force=False, settings=None):
+    if not force and settings is not None and report_mode(settings, "daily") == "off":
+        return
     now = dt.datetime.now(dt.timezone.utc)
     since = (now - dt.timedelta(hours=24)).isoformat()
     for user in users:
@@ -229,24 +236,50 @@ def send_daily_report(users):
         opens = _fetch_rows(user["id"], status="open")
         entries = _fetch_rows(user["id"], since=since)
         msg = daily_message(user, closed, stats, opens, entries)
-        try:
-            if _is_admin(user):
-                telegram_bot.send_message(msg)
-            user_chat = (user.get("tg_chat_id") or "").strip()
-            if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
-                telegram_bot.send_message(msg, chat_id=user_chat)
-        except Exception:
-            pass
+        _send_to_user(user, msg)
 
 
-def send_due_reports(users):
+def send_period_report(users, label, days, force=False, settings=None):
+    period = {"harian": "daily", "mingguan": "weekly", "bulanan": "monthly", "tahunan": "yearly"}.get(label, label)
+    if not force and settings is not None and report_mode(settings, period) == "off":
+        return
+    now = dt.datetime.now(dt.timezone.utc)
+    since = (now - dt.timedelta(days=days)).isoformat()
+    for user in users:
+        rows = _fetch_closed(user["id"], since=since)
+        stats = _aggregate(rows)
+        if not stats or stats["n"] == 0:
+            continue
+        msg = period_message(user, label, stats)
+        _send_to_user(user, msg)
+
+
+def send_manual_reports(users, periods=None, settings=None):
+    periods = periods or ["daily", "weekly", "monthly", "yearly"]
+    for period in periods:
+        if settings is not None and report_mode(settings, period) == "off":
+            continue
+        if period == "daily":
+            send_daily_report(users, force=True)
+        elif period == "weekly":
+            send_period_report(users, "mingguan", 7, force=True)
+        elif period == "monthly":
+            send_period_report(users, "bulanan", 30, force=True)
+        elif period == "yearly":
+            send_period_report(users, "tahunan", 365, force=True)
+
+
+def send_due_reports(users, settings=None):
     if not users:
         return
     now = dt.datetime.now(dt.timezone.utc)
     if now.hour != 0:
         return
-    send_daily_report(users)
-    if now.weekday() == 0:
+    if report_mode(settings, "daily") == "auto":
+        send_daily_report(users)
+    if now.weekday() == 0 and report_mode(settings, "weekly") == "auto":
         send_period_report(users, "mingguan", 7)
-    if now.day == 1:
+    if now.day == 1 and report_mode(settings, "monthly") == "auto":
         send_period_report(users, "bulanan", 30)
+    if now.day == 1 and now.month == 1 and report_mode(settings, "yearly") == "auto":
+        send_period_report(users, "tahunan", 365)

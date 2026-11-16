@@ -32,6 +32,80 @@ def execution_env_label(exec_mode="demo"):
     return "BingX USDT (akun real)" if (exec_mode or "demo").strip().lower() == "real" else "BingX VST (demo)"
 
 
+def _credential_sets(credentials=None):
+    sets = []
+    is_owner = True
+    if credentials and credentials.get("api_key") and credentials.get("secret_key"):
+        sets.append((credentials["api_key"], credentials["secret_key"]))
+        is_owner = credentials["api_key"] == config.BINGX_API_KEY
+    elif config.BINGX_API_KEY and config.BINGX_SECRET_KEY:
+        sets.append((config.BINGX_API_KEY, config.BINGX_SECRET_KEY))
+    if is_owner and config.BINGX_BACKUP_API_KEY and config.BINGX_BACKUP_SECRET_KEY:
+        pair = (config.BINGX_BACKUP_API_KEY, config.BINGX_BACKUP_SECRET_KEY)
+        if pair not in sets:
+            sets.append(pair)
+    return sets
+
+
+def ping_account(exchange):
+    exchange.fetch_balance({"type": "swap"})
+    return True
+
+
+def build_authenticated_exchange(credentials=None, exec_mode="demo"):
+    cred_sets = _credential_sets(credentials)
+    if not cred_sets:
+        raise RuntimeError("Tidak ada pasangan API key BingX yang dikonfigurasi.")
+    last_error = None
+    for api_key, secret_key in cred_sets:
+        try:
+            exchange = build_trading_exchange(api_key, secret_key, exec_mode)
+            ping_account(exchange)
+            return exchange
+        except Exception as exc:
+            last_error = exc
+            log.warning("Autentikasi BingX gagal untuk satu pasangan key; mencoba cadangan jika tersedia.")
+    raise RuntimeError(f"Semua pasangan API key BingX gagal: {str(last_error).splitlines()[0][:150]}")
+
+
+def keep_credentials_active(users=None):
+    users = users or []
+    cred_sets = _credential_sets()
+    if not cred_sets and not any(u.get("api_key") and u.get("secret_key") for u in users):
+        return False
+    all_ok = True
+    seen = set()
+    exec_mode = "real" if config.EXEC_MODE == "real" else "demo"
+    for api_key, secret_key in cred_sets:
+        pair = (api_key, secret_key, exec_mode)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        try:
+            exchange = build_trading_exchange(api_key, secret_key, exec_mode)
+            ping_account(exchange)
+            log.info("Keep-alive BingX sukses (%s) - pemeriksaan akun selesai.", exec_mode)
+        except Exception as exc:
+            all_ok = False
+            log.warning("Keep-alive BingX %s gagal: %s", exec_mode, str(exc).splitlines()[0][:150])
+    for user in users:
+        if not (user.get("api_key") and user.get("secret_key")):
+            continue
+        user_mode = "real" if user.get("exec_mode") == "real" else "demo"
+        pair = (user["api_key"], user["secret_key"], user_mode)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        try:
+            exchange = build_trading_exchange(user["api_key"], user["secret_key"], user_mode)
+            ping_account(exchange)
+            log.info("Keep-alive BingX sukses (%s) untuk %s.", user_mode, user.get("email"))
+        except Exception as exc:
+            all_ok = False
+            log.warning("Keep-alive BingX %s gagal untuk %s: %s", user_mode, user.get("email"), str(exc).splitlines()[0][:150])
+    return all_ok
+
+
 def free_balance(exchange, margin_coin):
     last_error = None
     for params in ({"type": "swap"}, None):
@@ -262,7 +336,7 @@ def execute(levels, live, data_source_id=None, symbol=None, credentials=None, ex
     if credentials:
         exchange = build_trading_exchange(credentials["api_key"], credentials["secret_key"], exec_mode)
     else:
-        exchange = build_trading_exchange(config.BINGX_API_KEY, config.BINGX_SECRET_KEY, exec_mode)
+        exchange = build_authenticated_exchange(None, exec_mode)
     exchange.load_markets()
     existing = open_positions(exchange, symbol)
     if existing:

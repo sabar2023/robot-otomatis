@@ -89,6 +89,8 @@ WATCHLIST_SIZE = int(os.getenv("VST_WATCHLIST_SIZE", "5"))
 
 BINGX_API_KEY = os.getenv("BINGX_API_KEY", "").strip()
 BINGX_SECRET_KEY = os.getenv("BINGX_SECRET_KEY", "").strip()
+BINGX_BACKUP_API_KEY = os.getenv("BINGX_BACKUP_API_KEY", "").strip()
+BINGX_BACKUP_SECRET_KEY = os.getenv("BINGX_BACKUP_SECRET_KEY", "").strip()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()

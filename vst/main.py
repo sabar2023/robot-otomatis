@@ -42,8 +42,8 @@ def owner_user():
         "is_blocked": False,
         "plan": "premium",
         "trial_ends_at": None,
-        "api_key": config.BINGX_API_KEY,
-        "secret_key": config.BINGX_SECRET_KEY,
+        "api_key": database.bingx_credentials()[0],
+        "secret_key": database.bingx_credentials()[1],
         "mode_otomatis": True,
         "mode_manual": False,
         "coins": [],
@@ -392,7 +392,8 @@ def main():
 
     users = database.fetch_users()
     has_user_keys = any(u["api_key"] and u["secret_key"] for u in users)
-    if live and not ((config.BINGX_API_KEY and config.BINGX_SECRET_KEY) or has_user_keys):
+    admin_api, admin_secret = database.bingx_credentials()
+    if live and not ((admin_api and admin_secret) or has_user_keys):
         log.error("Mode live dipilih tetapi tidak ada kredensial BingX (env maupun Supabase). Jalankan dengan --dry-run.")
         sys.exit(1)
     if live:

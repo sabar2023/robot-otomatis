@@ -32,18 +32,47 @@ def execution_env_label(exec_mode="demo"):
     return "BingX USDT (akun real)" if (exec_mode or "demo").strip().lower() == "real" else "BingX VST (demo)"
 
 
+def _owner_bingx_keys():
+    api_key = (config.BINGX_API_KEY or "").strip()
+    secret_key = (config.BINGX_SECRET_KEY or "").strip()
+    if api_key and secret_key:
+        return api_key, secret_key
+    try:
+        import database
+        return database.bingx_credentials()
+    except Exception:
+        return api_key, secret_key
+
+
 def _credential_sets(credentials=None):
     sets = []
     is_owner = True
+    owner_api, owner_secret = _owner_bingx_keys()
     if credentials and credentials.get("api_key") and credentials.get("secret_key"):
         sets.append((credentials["api_key"], credentials["secret_key"]))
-        is_owner = credentials["api_key"] == config.BINGX_API_KEY
-    elif config.BINGX_API_KEY and config.BINGX_SECRET_KEY:
-        sets.append((config.BINGX_API_KEY, config.BINGX_SECRET_KEY))
+        is_owner = credentials["api_key"] == owner_api
+    elif owner_api and owner_secret:
+        sets.append((owner_api, owner_secret))
     if is_owner and config.BINGX_BACKUP_API_KEY and config.BINGX_BACKUP_SECRET_KEY:
         pair = (config.BINGX_BACKUP_API_KEY, config.BINGX_BACKUP_SECRET_KEY)
         if pair not in sets:
             sets.append(pair)
+    if is_owner:
+        try:
+            import database
+
+            admin_api, admin_secret = database.bingx_admin_credentials()
+            if admin_api and admin_secret:
+                pair = (admin_api, admin_secret)
+                if pair not in sets:
+                    sets.append(pair)
+            backup_api, backup_secret = database.bingx_backup_credentials()
+            if backup_api and backup_secret:
+                pair = (backup_api, backup_secret)
+                if pair not in sets:
+                    sets.append(pair)
+        except Exception:
+            pass
     return sets
 
 

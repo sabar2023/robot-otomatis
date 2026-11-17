@@ -44,6 +44,10 @@ class _AdminScreenState extends State<AdminScreen> {
     "trading_leverage",
     "feature_premium_active",
     "feature_free_active",
+    "bingx_api_key",
+    "bingx_secret_key",
+    "bingx_backup_api_key",
+    "bingx_backup_secret_key",
   ];
 
   @override
@@ -379,6 +383,32 @@ class _AdminScreenState extends State<AdminScreen> {
                 _field("feature_premium_active", "Fitur Premium aktif (true/false)"),
                 const SizedBox(height: 10),
                 _field("feature_free_active", "Fitur Free aktif (true/false)"),
+                const SizedBox(height: 10),
+                _field("bingx_api_key", "BingX API Key (engine)"),
+                const SizedBox(height: 10),
+                _field("bingx_secret_key", "BingX Secret Key (engine)", obscure: true),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () {
+                    _setCtrls["bingx_api_key"]?.clear();
+                    _setCtrls["bingx_secret_key"]?.clear();
+                    _saveSettings();
+                  },
+                  child: const Text("Hapus Key BingX"),
+                ),
+                const SizedBox(height: 14),
+                _field("bingx_backup_api_key", "BingX API Key (backup)"),
+                const SizedBox(height: 10),
+                _field("bingx_backup_secret_key", "BingX Secret Key (backup)", obscure: true),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () {
+                    _setCtrls["bingx_backup_api_key"]?.clear();
+                    _setCtrls["bingx_backup_secret_key"]?.clear();
+                    _saveSettings();
+                  },
+                  child: const Text("Hapus Key BingX Backup"),
+                ),
                 const SizedBox(height: 14),
                 FilledButton(onPressed: _saveSettings, child: const Text("Simpan Setelan")),
               ],
@@ -408,9 +438,10 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  Widget _field(String key, String label) {
+  Widget _field(String key, String label, {bool obscure = false}) {
     return TextField(
       controller: _setCtrls[key],
+      obscureText: obscure,
       decoration: appDecoration(label: label),
     );
   }

@@ -270,6 +270,37 @@ def fetch_settings():
         return {}
 
 
+def bingx_admin_credentials():
+    settings = fetch_settings()
+    raw_api = (settings.get("bingx_api_key") or "").strip()
+    raw_secret = (settings.get("bingx_secret_key") or "").strip()
+    if not raw_api and not raw_secret:
+        return "", ""
+    return (decrypt_secret(raw_api) or raw_api).strip(), (decrypt_secret(raw_secret) or raw_secret).strip()
+
+
+def bingx_backup_credentials():
+    settings = fetch_settings()
+    raw_api = (settings.get("bingx_backup_api_key") or "").strip()
+    raw_secret = (settings.get("bingx_backup_secret_key") or "").strip()
+    if not raw_api and not raw_secret:
+        return "", ""
+    return (decrypt_secret(raw_api) or raw_api).strip(), (decrypt_secret(raw_secret) or raw_secret).strip()
+
+
+def bingx_credentials():
+    api_key = (config.BINGX_API_KEY or "").strip()
+    secret_key = (config.BINGX_SECRET_KEY or "").strip()
+    if api_key and secret_key:
+        return api_key, secret_key
+    settings = fetch_settings()
+    raw_api = (settings.get("bingx_api_key") or "").strip()
+    raw_secret = (settings.get("bingx_secret_key") or "").strip()
+    if not raw_api and not raw_secret:
+        return api_key, secret_key
+    return (decrypt_secret(raw_api) or raw_api or api_key).strip(), (decrypt_secret(raw_secret) or raw_secret or secret_key).strip()
+
+
 def auto_enabled():
     if not is_configured():
         return True

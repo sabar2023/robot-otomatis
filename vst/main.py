@@ -85,7 +85,7 @@ def _daily_frame(fetch, symbol):
     return market_data.closed_candles(raw)
 
 
-def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_alerts=True, settings=None, sent_chats=None):
+def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_alerts=True, settings=None, sent_chats=None, trading=None):
     now = dt.datetime.now(dt.timezone.utc)
     log.info("Memindai %s ...", symbol)
     raw, src = fetch(symbol, config.TIMEFRAME, config.CANDLE_LIMIT)
@@ -136,21 +136,35 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
         execute_live = False
 
     manual = bool(user.get("mode_manual"))
-    margin_mode = (user.get("margin_mode") or "fixed").strip().lower()
+    trading = trading or {}
+    if manual:
+        margin_mode = (user.get("margin_mode") or "fixed").strip().lower()
+        leverage = user.get("leverage")
+        margin_pct = user.get("margin_pct")
+        sl_pct = user.get("sl_pct")
+        tp_pct = user.get("tp_pct")
+        max_open = None
+    else:
+        margin_mode = trading.get("margin_mode") or (user.get("margin_mode") or "fixed").strip().lower()
+        leverage = trading.get("leverage") or user.get("leverage")
+        margin_pct = trading.get("margin_pct") or user.get("margin_pct")
+        sl_pct = trading.get("sl_pct")
+        tp_pct = trading.get("tp_pct")
+        max_open = trading.get("max_open")
     use_user_margin = manual or margin_mode == "pct"
     levels = risk.compute_levels(
         result["direction"],
         result["price"],
         result["atr"],
-        sl_pct=user["sl_pct"] if manual else None,
-        tp_pct=user["tp_pct"] if manual else None,
-        leverage=user["leverage"] if manual else None,
-        margin_pct=user["margin_pct"] if use_user_margin else None,
+        sl_pct=sl_pct,
+        tp_pct=tp_pct,
+        leverage=leverage,
+        margin_pct=margin_pct if use_user_margin else None,
     )
     levels["margin_mode"] = margin_mode
     credentials = {"api_key": user["api_key"], "secret_key": user["secret_key"]}
     exec_mode = (user.get("exec_mode") or "demo").strip().lower()
-    execution = executor.execute(levels, live=execute_live, data_source_id=src, symbol=symbol, credentials=credentials, exec_mode=exec_mode)
+    execution = executor.execute(levels, live=execute_live, data_source_id=src, symbol=symbol, credentials=credentials, exec_mode=exec_mode, max_open=max_open)
     database.log_execution(symbol, execution["mode"], levels, execution)
     database.log_trade(user["id"], symbol, levels, execution)
     log.info("Eksekusi [%s]: %s", execution["mode"], execution["detail"])
@@ -211,6 +225,7 @@ def simulate_once(email):
         return 0
 
     auto_global = database.auto_enabled()
+    trading = database.trading_defaults()
     daily_cache = {}
     mode_label = "manual" if user.get("mode_manual") else "otomatis"
     if user.get("mode_manual") and user["coins"]:
@@ -222,7 +237,7 @@ def simulate_once(email):
     results = []
     for symbol in coins:
         try:
-            r = scan_symbol(False, fetch, user, symbol, auto_global, daily_cache, send_alerts=False)
+            r = scan_symbol(False, fetch, user, symbol, auto_global, daily_cache, send_alerts=False, trading=trading)
             if r:
                 results.append(r)
         except Exception as exc:
@@ -249,6 +264,7 @@ def scan_once(live, only_email=None):
 
     auto_global = database.auto_enabled()
     settings = database.fetch_settings()
+    trading = database.trading_defaults()
     watch_cache = {}
     daily_cache = {}
     sent_chats = set()
@@ -271,7 +287,7 @@ def scan_once(live, only_email=None):
                 coins = watch_cache["default"]
             for symbol in coins:
                 try:
-                    scan_symbol(live, fetch, user, symbol, auto_global, daily_cache, settings=settings, sent_chats=sent_chats)
+                    scan_symbol(live, fetch, user, symbol, auto_global, daily_cache, settings=settings, sent_chats=sent_chats, trading=trading)
                 except Exception as exc:
                     log.error("Gagal memindai %s untuk %s: %s", symbol, user["email"], _one_line(exc))
         closed = pnl.sync_all(users, live)

@@ -288,6 +288,31 @@ def bingx_backup_credentials():
     return (decrypt_secret(raw_api) or raw_api).strip(), (decrypt_secret(raw_secret) or raw_secret).strip()
 
 
+def _num(value, cast=float):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return cast(float(text))
+    except Exception:
+        return None
+
+
+def trading_defaults():
+    settings = fetch_settings()
+    mode = (settings.get("trading_margin_mode") or "").strip().lower()
+    return {
+        "margin_mode": mode if mode in ("fixed", "pct") else None,
+        "margin_pct": _num(settings.get("trading_margin_pct")),
+        "leverage": _num(settings.get("trading_leverage"), int),
+        "sl_pct": _num(settings.get("trading_sl_pct")),
+        "tp_pct": _num(settings.get("trading_tp_pct")),
+        "max_open": _num(settings.get("trading_max_open"), int),
+    }
+
+
 def bingx_credentials():
     api_key = (config.BINGX_API_KEY or "").strip()
     secret_key = (config.BINGX_SECRET_KEY or "").strip()

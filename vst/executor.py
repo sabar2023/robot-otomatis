@@ -167,6 +167,11 @@ def open_positions(exchange, symbol):
     ]
 
 
+def open_positions_all(exchange):
+    positions = exchange.fetch_positions()
+    return [p for p in positions if float(p.get("contracts") or 0) > 0]
+
+
 def compute_size(exchange, symbol, entry, levels, margin_coin):
     free = free_balance(exchange, margin_coin)
     if free <= 0:
@@ -337,7 +342,7 @@ def _place_entry_order_fallback(exchange, symbol, side, amount, params, levels, 
     return order, tp1
 
 
-def execute(levels, live, data_source_id=None, symbol=None, credentials=None, exec_mode="demo"):
+def execute(levels, live, data_source_id=None, symbol=None, credentials=None, exec_mode="demo", max_open=None):
     symbol = symbol or config.SYMBOL
     exec_mode = (exec_mode or "demo").strip().lower()
     margin_coin = margin_coin_for(exec_mode)
@@ -382,6 +387,25 @@ def execute(levels, live, data_source_id=None, symbol=None, credentials=None, ex
             "exec_mode": exec_mode,
             "detail": f"Sudah ada posisi terbuka ({pos['side']} {pos['contracts']} x{pos.get('leverage')}x) - entry baru dilewati.",
         }
+
+    if max_open:
+        try:
+            current = open_positions_all(exchange)
+            if len(current) >= int(max_open):
+                return {
+                    "mode": "live",
+                    "executed": False,
+                    "side": None,
+                    "amount": None,
+                    "order_id": None,
+                    "margin_used": None,
+                    "notional": None,
+                    "margin_coin": margin_coin,
+                    "exec_mode": exec_mode,
+                    "detail": f"Batas maksimal {int(max_open)} posisi terbuka sudah tercapai ({len(current)}) - entry baru dilewati.",
+                }
+        except Exception as exc:
+            log.warning("Cek jumlah posisi terbuka gagal: %s", str(exc).splitlines()[0][:120])
 
     _set_isolated_margin(exchange, symbol)
     _apply_leverage(exchange, symbol, levels["leverage"])

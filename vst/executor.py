@@ -178,6 +178,8 @@ def compute_size(exchange, symbol, entry, levels, margin_coin):
         raise RuntimeError(f"Saldo free {margin_coin} = 0 - tidak ada margin untuk entry.")
     if levels.get("margin_mode") == "pct":
         margin_used = free * levels["margin_pct"] / 100.0
+    elif levels.get("base_balance"):
+        margin_used = min(float(levels["base_balance"]) * levels["margin_pct"] / 100.0, free)
     else:
         margin_used = min(free * config.FIXED_MARGIN_PCT / 100.0, free)
     notional = margin_used * levels["leverage"]

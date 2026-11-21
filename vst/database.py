@@ -310,6 +310,7 @@ def trading_defaults():
         "sl_pct": _num(settings.get("trading_sl_pct")),
         "tp_pct": _num(settings.get("trading_tp_pct")),
         "max_open": _num(settings.get("trading_max_open"), int),
+        "base_balance": _num(settings.get("trading_base_balance")),
     }
 
 

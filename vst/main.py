@@ -144,6 +144,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
         sl_pct = user.get("sl_pct")
         tp_pct = user.get("tp_pct")
         max_open = None
+        base_balance = None
     else:
         margin_mode = trading.get("margin_mode") or (user.get("margin_mode") or "fixed").strip().lower()
         leverage = trading.get("leverage") or user.get("leverage")
@@ -151,7 +152,8 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
         sl_pct = trading.get("sl_pct")
         tp_pct = trading.get("tp_pct")
         max_open = trading.get("max_open")
-    use_user_margin = manual or margin_mode == "pct"
+        base_balance = trading.get("base_balance")
+    use_margin_pct = margin_pct if (manual or margin_mode == "pct" or base_balance) else None
     levels = risk.compute_levels(
         result["direction"],
         result["price"],
@@ -159,7 +161,8 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
         sl_pct=sl_pct,
         tp_pct=tp_pct,
         leverage=leverage,
-        margin_pct=margin_pct if use_user_margin else None,
+        margin_pct=use_margin_pct,
+        base_balance=base_balance,
     )
     levels["margin_mode"] = margin_mode
     credentials = {"api_key": user["api_key"], "secret_key": user["secret_key"]}

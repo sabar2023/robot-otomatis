@@ -5,7 +5,7 @@ def _clamp(value, lo, hi):
     return max(lo, min(hi, float(value)))
 
 
-def compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, leverage=None, margin_pct=None):
+def compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, leverage=None, margin_pct=None, base_balance=None):
     price = float(entry_price)
     atr = float(atr_value)
     if sl_pct is None:
@@ -29,6 +29,7 @@ def compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, 
     lev = max(config.LEVERAGE_MIN, min(config.LEVERAGE_MAX, lev))
     mg = float(margin_pct) if margin_pct else config.MARGIN_PCT
     mg = max(1.0, min(100.0, mg))
+    base = float(base_balance) if base_balance else 0.0
     if direction == "LONG":
         stop_loss = price * (1.0 - sl_pct / 100.0)
         take_profit = price * (1.0 + tp_pct / 100.0)
@@ -56,5 +57,6 @@ def compute_levels(direction, entry_price, atr_value, sl_pct=None, tp_pct=None, 
         "tp1_pct": tp1_pct,
         "tp1_fraction": tp1_fraction,
         "margin_pct": mg,
+        "base_balance": base,
         "leverage": lev,
     }

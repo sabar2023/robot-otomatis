@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duplicator BrandBisnis V5.0</title>
+<style>
+  :root { --bg:#0b1220; --panel:#121b2e; --line:#22304a; --text:#e6edf7; --muted:#8fa3c0; --accent:#22c1a4; --danger:#ef5350; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:18px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; }
+  .sub { color:var(--muted); font-size:12.5px; margin-top:3px; }
+  main { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:18px 22px 40px; max-width:1280px; margin:0 auto; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .panel h2 { font-size:15px; margin:0 0 12px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  input[type=text], input[type=password], select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#0d1526; color:var(--text); font-size:13px; }
+  button { cursor:pointer; border:0; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:600; }
+  .primary { background:var(--accent); color:#052b25; }
+  .ghost { background:#1a2740; color:var(--text); border:1px solid var(--line); }
+  .danger { background:var(--danger); color:#fff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .check { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); margin-top:8px; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; font-size:12.5px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  .tag { font-size:11px; color:var(--accent); }
+  pre { background:#080e1a; border:1px solid var(--line); border-radius:10px; padding:12px; font-size:12px; max-height:340px; overflow:auto; white-space:pre-wrap; }
+  .status { font-size:12px; padding:4px 10px; border-radius:20px; border:1px solid var(--line); color:var(--muted); }
+  .ok { color:var(--accent); border-color:var(--accent); }
+  .err { color:var(--danger); border-color:var(--danger); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Duplicator BrandBisnis V5.0</h1>
+    <div class="sub">Backup &amp; restore seluruh sistem (kode, Supabase, GitHub, Cloudflare Worker)</div>
+  </div>
+  <div class="row">
+    <input id="token" type="password" placeholder="Token akses" style="max-width:200px" />
+    <button class="ghost" onclick="saveToken()">Simpan Token</button>
+    <span id="status" class="status">belum terhubung</span>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1. Backup Sekarang</h2>
+    <div class="sub">Membuat arsip lengkap dan menyimpannya di folder backups/ server ini.</div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnBackup" class="primary" onclick="doBackup()">Buat Backup</button>
+      <button class="ghost" onclick="loadState()">Muat Ulang</button>
+    </div>
+    <table>
+      <thead><tr><th>Arsip</th><th>Ukuran</th><th>Aksi</th></tr></thead>
+      <tbody id="backups"><tr><td colspan="3" class="sub">memuat...</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>2. Restore / Duplikasi</h2>
+    <div class="sub">Salin data ke project Supabase tujuan. Klik Restore untuk langsung menjalankan.</div>
+    <label>Arsip backup</label>
+    <select id="archive"></select>
+    <label>Target Supabase URL</label>
+    <input id="targetUrl" type="text" placeholder="https://PROJECT_BARU.supabase.co" />
+    <label>Target Service Key</label>
+    <input id="targetKey" type="password" placeholder="service_role key project tujuan" />
+    <label>Repo GitHub baru (opsional)</label>
+    <input id="newRepo" type="text" placeholder="akun/repo-baru" />
+    <div class="check"><input type="checkbox" id="skipAuth" /> <span>Lewati pembuatan user auth (hanya data)</span></div>
+    <div class="check"><input type="checkbox" id="applyGithub" /> <span>Set GitHub variables &amp; secrets ke repo baru</span></div>
+    <div class="check"><input type="checkbox" id="deployWorker" /> <span>Deploy Cloudflare Worker setelah restore</span></div>
+    <div class="check"><input type="checkbox" id="dryRun" /> <span>Dry-run (uji tanpa menulis)</span></div>
+    <div class="row" style="margin-top:14px">
+      <button id="btnRestore" class="danger" onclick="doRestore()">Restore Sekarang</button>
+    </div>
+  </section>
+
+  <section class="panel" style="grid-column:1/-1">
+    <h2>3. Log Proses</h2>
+    <pre id="log">Belum ada proses.</pre>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+function token() {
+  const url = new URL(location.href);
+  const fromUrl = url.searchParams.get("token");
+  if (fromUrl) { localStorage.setItem("dup_token", fromUrl); }
+  return localStorage.getItem("dup_token") || "";
+}
+function saveToken() {
+  localStorage.setItem("dup_token", $("token").value.trim());
+  loadState();
+}
+function log(text) { $("log").textContent = text; }
+function setStatus(text, cls) {
+  const el = $("status"); el.textContent = text; el.className = "status " + (cls || "");
+}
+function fmtSize(bytes) { return (bytes / 1024).toFixed(0) + " KB"; }
+
+async function api(path, body) {
+  const opts = body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: token(), ...body }) }
+                    : { headers: { "X-Token": token() } };
+  const resp = await fetch(path + (body ? "" : ("?token=" + encodeURIComponent(token()))), opts);
+  return resp.json();
+}
+
+async function loadState() {
+  $("token").value = token();
+  try {
+    const data = await api("/api/state");
+    if (data.error) { setStatus(data.error, "err"); return; }
+    setStatus("terhubung", "ok");
+    const rows = (data.backups || []).map(b =>
+      `<tr><td>${b.name}</td><td>${fmtSize(b.size)}</td>
+       <td><a class="tag" href="/download?token=${encodeURIComponent(token())}&name=${encodeURIComponent(b.name)}">download</a></td></tr>`).join("");
+    $("backups").innerHTML = rows || `<tr><td colspan="3" class="sub">belum ada arsip</td></tr>`;
+    const sel = $("archive");
+    sel.innerHTML = (data.backups || []).map(b => `<option value="${b.name}">${b.name}</option>`).join("") || `<option value="">(belum ada)</option>`;
+    if (data.repo && !$("newRepo").value) $("newRepo").placeholder = "akun/repo-baru";
+  } catch (e) {
+    setStatus("gagal terhubung", "err");
+  }
+}
+
+async function doBackup() {
+  $("btnBackup").disabled = true; setStatus("membuat backup...", "");
+  log("Menjalankan backup...");
+  try {
+    const data = await api("/api/backup", {});
+    log(data.output || "");
+    setStatus(data.ok ? "backup selesai" : "backup gagal", data.ok ? "ok" : "err");
+  } catch (e) { log("Gagal: " + e); setStatus("backup gagal", "err"); }
+  finally { $("btnBackup").disabled = false; loadState(); }
+}
+
+async function doRestore() {
+  const archive = $("archive").value;
+  if (!archive) { alert("Pilih arsip backup dulu"); return; }
+  if (!$("targetUrl").value || !$("targetKey").value) { alert("Isi Target Supabase URL dan Service Key"); return; }
+  if (!$("dryRun").checked && !confirm("Restore TULIS ke project tujuan. Lanjutkan?")) return;
+  $("btnRestore").disabled = true; setStatus("restore berjalan...", "");
+  log("Menjalankan restore...");
+  try {
+    const data = await api("/api/restore", {
+      archive,
+      target_url: $("targetUrl").value.trim(),
+      target_service_key: $("targetKey").value.trim(),
+      new_repo: $("newRepo").value.trim(),
+      skip_auth: $("skipAuth").checked,
+      apply_github: $("applyGithub").checked,
+      deploy_worker: $("deployWorker").checked,
+      dry_run: $("dryRun").checked,
+    });
+    log(data.output || "");
+    setStatus(data.ok ? "restore selesai" : "restore gagal", data.ok ? "ok" : "err");
+  } catch (e) { log("Gagal: " + e); setStatus("restore gagal", "err"); }
+  finally { $("btnRestore").disabled = false; }
+}
+
+token();
+loadState();
+</script>
+</body>
+</html>

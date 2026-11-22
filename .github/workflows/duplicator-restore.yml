@@ -1,0 +1,66 @@
+name: Duplicator Restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      archive:
+        description: "Nama objek arsip di bucket system-backups (mis. duplicator-20261121-210350.tar.gz)"
+        type: string
+        required: true
+      target_url:
+        description: "URL project Supabase tujuan (https://xxxx.supabase.co)"
+        type: string
+        required: true
+      skip_auth:
+        description: "Lewati pembuatan user auth (hanya data)"
+        type: boolean
+        default: false
+      confirm:
+        description: "Ketik RESTORE untuk konfirmasi tulis"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    if: ${{ inputs.confirm == 'RESTORE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unduh arsip dari Supabase Storage sumber
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://jklbczruvbxscpwxxfud.supabase.co' }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          mkdir -p backups
+          python3 tools/duplicator/storage.py --download "${{ inputs.archive }}" --out "backups/${{ inputs.archive }}"
+
+      - name: Restore ke project tujuan
+        env:
+          RESTORE_TARGET_KEY: ${{ secrets.RESTORE_SERVICE_KEY }}
+          RESTORE_TEMP_PASSWORD: ${{ secrets.RESTORE_TEMP_PASSWORD }}
+        run: |
+          if [ -z "$RESTORE_TARGET_KEY" ]; then
+            echo "RESTORE_SERVICE_KEY belum diset di repository secrets"
+            exit 1
+          fi
+          ARGS=(--archive "backups/${{ inputs.archive }}" --target-url "${{ inputs.target_url }}" --target-service-key "$RESTORE_TARGET_KEY" --yes)
+          if [ "${{ inputs.skip_auth }}" = "true" ]; then ARGS+=(--skip-auth); fi
+          python3 tools/duplicator/restore.py "${ARGS[@]}" | tee restore.log
+          {
+            echo "### Duplicator Restore"
+            echo "Target: ${{ inputs.target_url }}"
+            echo "Arsip: ${{ inputs.archive }}"
+            tail -n 25 restore.log
+          } >> "$GITHUB_STEP_SUMMARY"

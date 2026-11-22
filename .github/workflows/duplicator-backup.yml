@@ -1,0 +1,41 @@
+name: Duplicator Backup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Buat backup dan unggah ke Supabase Storage
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://jklbczruvbxscpwxxfud.supabase.co' }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SETTINGS_ENC_KEY: ${{ secrets.SETTINGS_ENC_KEY }}
+          BINGX_API_KEY: ${{ secrets.BINGX_API_KEY }}
+          BINGX_SECRET_KEY: ${{ secrets.BINGX_SECRET_KEY }}
+          BINGX_BACKUP_API_KEY: ${{ secrets.BINGX_BACKUP_API_KEY }}
+          BINGX_BACKUP_SECRET_KEY: ${{ secrets.BINGX_BACKUP_SECRET_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 tools/duplicator/backup.py --upload-supabase | tee backup.log
+          {
+            echo "### Duplicator Backup"
+            grep -E '^(SELESAI|SHA256|OBJECT_PATH)=' backup.log || true
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duplicator - BrandBisnis V5.0</title>
+<style>
+  :root { --bg:#0b1220; --panel:#121b2e; --line:#22304a; --text:#e6edf7; --muted:#8fa3c0; --accent:#22c1a4; --warn:#f0b429; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width:920px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:22px; margin:0 0 6px; }
+  .sub { color:var(--muted); font-size:13.5px; line-height:1.6; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:22px; }
+  @media (max-width:760px){ .grid{ grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; }
+  .card h2 { font-size:16px; margin:0 0 8px; }
+  .btn { display:inline-block; margin-top:14px; padding:11px 16px; border-radius:10px; font-weight:700; font-size:13.5px; text-decoration:none; }
+  .primary { background:var(--accent); color:#052b25; }
+  .ghost { background:#1a2740; color:var(--text); border:1px solid var(--line); }
+  table { width:100%; border-collapse:collapse; margin-top:12px; font-size:13px; }
+  th,td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  code { background:#0d1526; border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:12.5px; }
+  ol { color:var(--muted); font-size:13.5px; line-height:1.8; padding-left:20px; }
+  .note { margin-top:16px; padding:12px 14px; border:1px solid var(--warn); border-radius:12px; color:var(--warn); font-size:12.5px; line-height:1.6; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Duplicator BrandBisnis V5.0</h1>
+      <div class="sub">Backup dan restore seluruh sistem langsung dari GitHub Actions. Tanpa terminal.</div>
+    </div>
+    <a class="btn ghost" href="./">Kembali ke aplikasi</a>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1. Buat Backup</h2>
+      <div class="sub">Membuat arsip lengkap (kode, 13 tabel Supabase, auth user, konfigurasi, env rahasia) lalu mengunggahnya ke bucket privat Supabase Storage <code>system-backups</code>.</div>
+      <a class="btn primary" target="_blank" rel="noopener"
+         href="https://github.com/sabar2023/robot-otomatis/actions/workflows/duplicator-backup.yml">Buka Halaman Backup</a>
+    </section>
+
+    <section class="card">
+      <h2>2. Restore / Duplikasi</h2>
+      <div class="sub">Menyalin arsip ke project Supabase tujuan. Isi URL project tujuan dan ketik <code>RESTORE</code>, lalu jalankan.</div>
+      <a class="btn primary" target="_blank" rel="noopener"
+         href="https://github.com/sabar2023/robot-otomatis/actions/workflows/duplicator-restore.yml">Buka Halaman Restore</a>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Prasyarat Secrets</h2>
+    <table>
+      <thead><tr><th>Nama</th><th>Dipakai untuk</th></tr></thead>
+      <tbody>
+        <tr><td><code>SUPABASE_SERVICE_KEY</code></td><td>Export database dan unggah arsip ke Storage (project sumber)</td></tr>
+        <tr><td><code>RESTORE_SERVICE_KEY</code></td><td>Service key project Supabase tujuan (khusus restore)</td></tr>
+        <tr><td><code>RESTORE_TEMP_PASSWORD</code></td><td>Password sementara untuk user auth yang dibuat saat restore</td></tr>
+        <tr><td><code>SETTINGS_ENC_KEY</code></td><td>Wajib sama dengan sistem lama agar API key user bisa didekripsi</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Alur Backup</h2>
+    <ol>
+      <li>Buka halaman Backup, klik <b>Run workflow</b> pada branch <code>main</code>.</li>
+      <li>Tunggu selesai. Ringkasan menampilkan <code>OBJECT_PATH</code> dan <code>SHA256</code>.</li>
+      <li>Arsip tersimpan приват di bucket <code>system-backups</code>. Tidak diunggah sebagai artifact publik.</li>
+    </ol>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Alur Restore</h2>
+    <ol>
+      <li>Siapkan project Supabase baru, jalankan file <code>docs/migration-*.sql</code>.</li>
+      <li>Set secret <code>RESTORE_SERVICE_KEY</code> dan <code>RESTORE_TEMP_PASSWORD</code> di repository.</li>
+      <li>Buka halaman Restore, isi nama arsip, URL tujuan, ketik <code>RESTORE</code>, lalu jalankan.</li>
+      <li>Setelah selesai: clone repo, set GitHub secrets/variables, deploy Cloudflare Worker.</li>
+    </ol>
+  </section>
+
+  <div class="note">
+    Arsip backup memuat rahasia (API key, service key, token). Bucket Storage bersifat privat dan file arsip tidak pernah di-commit ke repo. Jangan mengubah <code>SETTINGS_ENC_KEY</code> jika API key pelanggan masih ingin didekripsi. Password user tidak dapat diekspor; restore memakai password sementara dari <code>RESTORE_TEMP_PASSWORD</code>.
+  </div>
+</div>
+</body>
+</html>

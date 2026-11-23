@@ -134,6 +134,11 @@ gh run view <run-id> -R sabar2023/robot-otomatis --log
   terdistribusi (hanya ±42% hari ada sinyal) — tidak mungkin "order tiap hari" sambil
   tahan WR >80% karena L5 tren harian BTC memblokir semua koin saat BTC netral.
   Watchlist owner = 40 koin kripto manual (hindari aset tokenized).
+- Filter tambahan aktif: **L6 Bollinger Touch** (BB20 2sd; LONG wajib close ≤ lower band,
+  SHORT close ≥ upper band), dikontrol `VST_BB_TOUCH` (default 1 = aktif). Uji 6 bulan:
+  WR 92,9% tapi sinyal turun jadi ~0,23/hari; uji 2019–2026 (`vst/backtest_long_bb.py`):
+  WR 78,8%, 358 trade, tanpa tahun negatif, avg +0,61%/trade. Matikan dengan
+  `VST_BB_TOUCH=0` bila ingin kembali 5 layer.
 - `vst/watchlist.default_watchlist(chain)` → top-N swap USDT (default 5) berdasarkan
   volume 24h dari bursa pertama yang sukses; daftar bisa memuat aset tokenized
   (contoh `NCCOGOLD2USD`) — backtest hanya memvalidasi koin kripto, jadi set

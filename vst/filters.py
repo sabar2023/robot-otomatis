@@ -16,6 +16,10 @@ def _metrics(base):
     atr_now = float(ind.atr(base, config.ATR_PERIOD).iloc[-1])
     ema20 = float(ind.ema(base["close"], config.EMA_STACK_PERIODS[2]).iloc[-1])
     ema50 = float(ind.ema(base["close"], config.EMA_STACK_PERIODS[3]).iloc[-1])
+    bb_mid = float(ind.sma(base["close"], config.BB_PERIOD).iloc[-1])
+    bb_std = float(base["close"].rolling(config.BB_PERIOD).std(ddof=0).iloc[-1])
+    bb_up = bb_mid + config.BB_MULT * bb_std
+    bb_low = bb_mid - config.BB_MULT * bb_std
     return {
         "close": close,
         "ema200": ema200,
@@ -29,6 +33,9 @@ def _metrics(base):
         "atr": atr_now,
         "ema20": ema20,
         "ema50": ema50,
+        "bb_mid": bb_mid,
+        "bb_up": bb_up,
+        "bb_low": bb_low,
     }
 
 
@@ -121,6 +128,18 @@ def _daily_trend_layer(coin_trend, btc_trend, direction):
     }
 
 
+def _bollinger_layer(m, direction):
+    if direction == "LONG":
+        passed = m["close"] <= m["bb_low"]
+    else:
+        passed = m["close"] >= m["bb_up"]
+    return {
+        "name": "L6 Bollinger Touch",
+        "passed": (not config.BB_TOUCH_REQUIRED) or passed,
+        "detail": {"close": m["close"], "bb_low": m["bb_low"], "bb_up": m["bb_up"], "bb_mid": m["bb_mid"]},
+    }
+
+
 def _layers_for_direction(m, direction, coin_trend, btc_trend):
     return [
         _trend_direction_layer(m, coin_trend, btc_trend, direction),
@@ -128,6 +147,7 @@ def _layers_for_direction(m, direction, coin_trend, btc_trend):
         _rsi_layer(m, direction),
         _quality_layer(m),
         _daily_trend_layer(coin_trend, btc_trend, direction),
+        _bollinger_layer(m, direction),
     ]
 
 

@@ -35,6 +35,7 @@ jobs:
         env:
           VST_LIVE: ${{ vars.VST_LIVE || '0' }}
           VST_TIMEFRAME: ${{ vars.VST_TIMEFRAME || '1h' }}
+          VST_BB_TOUCH: ${{ vars.VST_BB_TOUCH || '1' }}
           BINGX_API_KEY: ${{ secrets.BINGX_API_KEY }}
           BINGX_SECRET_KEY: ${{ secrets.BINGX_SECRET_KEY }}
           BINGX_BACKUP_API_KEY: ${{ secrets.BINGX_BACKUP_API_KEY }}

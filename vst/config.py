@@ -56,6 +56,9 @@ BTC_TREND_SYMBOL = os.getenv("VST_BTC_SYMBOL", "BTC/USDT:USDT").strip()
 DAILY_TREND_PERIOD = 50
 DAILY_SLOPE_BARS = 3
 DAILY_CANDLE_LIMIT = 150
+BB_PERIOD = int(os.getenv("VST_BB_PERIOD", "20"))
+BB_MULT = float(os.getenv("VST_BB_MULT", "2"))
+BB_TOUCH_REQUIRED = os.getenv("VST_BB_TOUCH", "1").strip().lower() in ("1", "true", "yes", "on")
 
 RISK_MODE = os.getenv("VST_RISK_MODE", "pct").strip().lower()
 SL_PCT_DEFAULT = float(os.getenv("VST_SL_PCT", "3.0"))

@@ -145,6 +145,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
         tp_pct = user.get("tp_pct")
         max_open = None
         base_balance = None
+        margin_usdt = None
     else:
         margin_mode = trading.get("margin_mode") or (user.get("margin_mode") or "fixed").strip().lower()
         leverage = trading.get("leverage") or user.get("leverage")
@@ -153,6 +154,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
         tp_pct = trading.get("tp_pct")
         max_open = trading.get("max_open")
         base_balance = trading.get("base_balance")
+        margin_usdt = trading.get("margin_usdt")
     use_margin_pct = margin_pct if (manual or margin_mode == "pct" or base_balance) else None
     levels = risk.compute_levels(
         result["direction"],
@@ -163,6 +165,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
         leverage=leverage,
         margin_pct=use_margin_pct,
         base_balance=base_balance,
+        margin_usdt=margin_usdt,
     )
     levels["margin_mode"] = margin_mode
     credentials = {"api_key": user["api_key"], "secret_key": user["secret_key"]}
@@ -173,6 +176,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
     log.info("Eksekusi [%s]: %s", execution["mode"], execution["detail"])
 
     if send_alerts:
+        skipped_entry = (not execution.get("executed")) and ("dilewati" in str(execution.get("detail", "")).lower())
         html = telegram_bot.build_alert_html(result, levels, execution, user)
         user_chat = (user.get("tg_chat_id") or "").strip()
         sent_chats = sent_chats if sent_chats is not None else set()
@@ -181,8 +185,10 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
             targets = []
             if user_chat and user_chat != config.TELEGRAM_CHAT_ID:
                 targets.append(user_chat)
-            if user.get("role") == "admin":
+            if user.get("role") == "admin" and not skipped_entry:
                 targets.append(config.TELEGRAM_CHAT_ID)
+            if skipped_entry and not targets:
+                log.info("Entry dilewati untuk %s - alert grup tidak dikirim.", symbol)
             for chat_id in targets:
                 key = (chat_id.split("@")[0], symbol)
                 if key in sent_chats:
@@ -194,7 +200,7 @@ def scan_symbol(live, fetch, user, symbol, auto_global, daily_cache=None, send_a
                         log.info("Sinyal admin dikirim ke grup utama (monitoring).")
                     else:
                         log.info("Sinyal dikirim ke chat pribadi %s.", user["email"])
-            if not sent_any:
+            if targets and not sent_any:
                 log.info("Deduplikasi/personal tidak tersedia - sinyal hanya dicatat (in-app).")
         except Exception as exc:
             log.error("Gagal kirim alert Telegram: %s", _one_line(exc))

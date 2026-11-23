@@ -35,7 +35,8 @@ def build_alert_html(result, levels, execution, user=None):
     notional = execution.get("notional")
     margin_used = execution.get("margin_used")
     lev_line = f"&#128737; <b>LEVERAGE</b> : {levels['leverage']}x"
-    size_line = f"&#128176; <b>SIZE</b>     : {notional:,.0f} USDT notional | <b>MARGIN</b>: {margin_used:,.2f} {margin_coin} ({levels['margin_pct']:g}%)" if notional else (
+    margin_label = f"{levels['margin_usdt']:g} USDT" if levels.get("margin_usdt") else f"{levels['margin_pct']:g}%"
+    size_line = f"&#128176; <b>SIZE</b>     : {notional:,.0f} USDT notional | <b>MARGIN</b>: {margin_used:,.2f} {margin_coin} ({margin_label})" if notional else (
         f"&#128176; <b>MARGIN</b>   : {margin_coin} terisolasi"
     )
 

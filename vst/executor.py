@@ -176,7 +176,11 @@ def compute_size(exchange, symbol, entry, levels, margin_coin):
     free = free_balance(exchange, margin_coin)
     if free <= 0:
         raise RuntimeError(f"Saldo free {margin_coin} = 0 - tidak ada margin untuk entry.")
-    if levels.get("margin_mode") == "pct":
+    if levels.get("margin_usdt"):
+        margin_used = float(levels["margin_usdt"])
+        if free < margin_used:
+            raise RuntimeError(f"Saldo free {margin_coin} {free:,.2f} kurang dari margin tetap {margin_used:,.2f} - entry dilewati.")
+    elif levels.get("margin_mode") == "pct":
         margin_used = free * levels["margin_pct"] / 100.0
     elif levels.get("base_balance"):
         margin_used = min(float(levels["base_balance"]) * levels["margin_pct"] / 100.0, free)

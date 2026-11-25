@@ -507,7 +507,7 @@ class _AdminScreenState extends State<AdminScreen> {
                         decoration: BoxDecoration(
                           color: bgPanelLight,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: borderSoft),
+                          border: Border.all(color: const Color(0xFF155E6E)),
                         ),
                         child: Row(
                           children: [

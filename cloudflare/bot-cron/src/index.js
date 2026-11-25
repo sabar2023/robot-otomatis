@@ -8,21 +8,33 @@ const SUPABASE_ANON_KEY = "sb_publishable_Jj5TIfWxCu2vbsaj9Uoneg_EZjYrkta";
 async function dispatch(env, { repo, workflow, inputs }) {
   const body = { ref: "main" };
   if (inputs) body.inputs = inputs;
-  const resp = await fetch(
-    `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GITHUB_PAT}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "bot-cron-worker",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      body: JSON.stringify(body),
+  const url = `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`;
+  const delays = [0, 3000, 8000];
+  let last = { repo, workflow, status: 0, ok: false, body: "", attempts: 0 };
+  for (let i = 0; i < delays.length; i += 1) {
+    if (delays[i]) await new Promise((resolve) => setTimeout(resolve, delays[i]));
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_PAT}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "bot-cron-worker",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        return { repo, workflow, status: resp.status, ok: true, body: "", attempts: i + 1 };
+      }
+      const text = (await resp.text()).slice(0, 200);
+      last = { repo, workflow, status: resp.status, ok: false, body: text, attempts: i + 1 };
+      if (resp.status < 500 && resp.status !== 429) return last;
+    } catch (err) {
+      last = { repo, workflow, status: 0, ok: false, body: String(err).slice(0, 200), attempts: i + 1 };
     }
-  );
-  const respBody = resp.ok ? "" : (await resp.text()).slice(0, 200);
-  return { repo, workflow, status: resp.status, ok: resp.ok, body: respBody };
+  }
+  return last;
 }
 
 async function notify(env, text) {
@@ -48,7 +60,10 @@ async function runAll(env) {
   const failed = results.filter((r) => !r.ok);
   if (failed.length) {
     const detail = failed
-      .map((r) => `${r.repo}/${r.workflow}: HTTP ${r.status} ${r.body}`)
+      .map((r) => {
+        const code = r.status ? `HTTP ${r.status}` : "network error";
+        return `${r.repo}/${r.workflow}: ${code} setelah ${r.attempts || 1} percobaan ${r.body}`;
+      })
       .join("\n");
     await notify(env, `&#10060; <b>bot-cron: dispatch GitHub gagal</b>\n<code>${detail}</code>\nPeriksa secret <code>GITHUB_PAT</code> di Worker.`);
   }
@@ -552,6 +567,89 @@ async function handlePaymentCallback(env, request) {
   return new Response("ok", { status: 200 });
 }
 
+async function adminListBackups(env, request) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) return { status: auth.status, body: auth.body };
+  const sk = env.SUPABASE_SERVICE_KEY;
+  const resp = await fetch(`${SUPABASE_URL}/storage/v1/object/list/system-backups`, {
+    method: "POST",
+    headers: restHeaders(sk),
+    body: JSON.stringify({
+      prefix: "",
+      limit: 100,
+      offset: 0,
+      sortBy: { column: "created_at", order: "desc" },
+    }),
+  });
+  const data = await resp.json().catch(() => []);
+  if (!resp.ok) {
+    return { status: 502, body: { error: "storage_list_failed", detail: data } };
+  }
+  const items = (Array.isArray(data) ? data : [])
+    .filter((o) => o && typeof o.name === "string" && o.name.endsWith(".tar.gz"))
+    .map((o) => ({
+      name: o.name,
+      created_at: o.created_at || null,
+      updated_at: o.updated_at || null,
+      size: o.metadata?.size ?? null,
+    }));
+  return { status: 200, body: { ok: true, items } };
+}
+
+async function adminTriggerBackup(env, request) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) return { status: auth.status, body: auth.body };
+  if (!env.GITHUB_PAT) {
+    return { status: 500, body: { error: "github_pat_missing" } };
+  }
+  const repo = "sabar2023/robot-otomatis";
+  const workflow = "duplicator-backup.yml";
+  const resp = await fetch(
+    `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.GITHUB_PAT}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "bot-cron-worker",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({ ref: "main" }),
+    }
+  );
+  if (!resp.ok) {
+    const detail = (await resp.text()).slice(0, 300);
+    return { status: 502, body: { error: "dispatch_failed", detail } };
+  }
+  return { status: 200, body: { ok: true, workflow } };
+}
+
+async function adminBackupUrl(env, request) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) return { status: auth.status, body: auth.body };
+  const sk = env.SUPABASE_SERVICE_KEY;
+  const url = new URL(request.url);
+  const name = (url.searchParams.get("name") || "").trim();
+  if (!name || name.includes("/") || name.includes("..") || !name.endsWith(".tar.gz")) {
+    return { status: 400, body: { error: "invalid_name" } };
+  }
+  const resp = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/system-backups/${encodeURIComponent(name)}`, {
+    method: "POST",
+    headers: restHeaders(sk),
+    body: JSON.stringify({ expiresIn: 600 }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    return { status: 502, body: { error: "sign_failed", detail: data } };
+  }
+  const signed = data.signedURL || data.signedUrl || "";
+  if (!signed) {
+    return { status: 502, body: { error: "sign_missing" } };
+  }
+  const fullUrl = signed.startsWith("http") ? signed : `${SUPABASE_URL}/storage/v1${signed}`;
+  return { status: 200, body: { ok: true, url: fullUrl, expires_in: 600 } };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     const results = await runAll(env);
@@ -595,6 +693,18 @@ export default {
     }
     if (url.pathname === "/admin/set-password" && request.method === "POST") {
       const result = await adminSetPassword(env, request);
+      return Response.json(result.body, { status: result.status, headers: cors });
+    }
+    if (url.pathname === "/admin/backups" && request.method === "GET") {
+      const result = await adminListBackups(env, request);
+      return Response.json(result.body, { status: result.status, headers: cors });
+    }
+    if (url.pathname === "/admin/backup" && request.method === "POST") {
+      const result = await adminTriggerBackup(env, request);
+      return Response.json(result.body, { status: result.status, headers: cors });
+    }
+    if (url.pathname === "/admin/backup-url" && request.method === "GET") {
+      const result = await adminBackupUrl(env, request);
       return Response.json(result.body, { status: result.status, headers: cors });
     }
     if (url.pathname === "/admin/broadcast" && request.method === "POST") {

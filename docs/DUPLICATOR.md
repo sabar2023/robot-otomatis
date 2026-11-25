@@ -194,3 +194,94 @@ Uji lokal upload/download:
 python3 tools/duplicator/storage.py --upload backups/duplicator-*.tar.gz
 python3 tools/duplicator/storage.py --download <nama-objek> --out /tmp/uji.tar.gz
 ```
+
+## 9. Backup dari Admin Panel + Restore via cPanel (tanpa VPS/SSH)
+
+Metode ini untuk skenario paling sederhana: admin klik tombol di Flutter app, backup dibuat oleh GitHub Actions dan di-upload ke Supabase Storage. Restore dilakukan dengan upload satu file PHP ke cPanel.
+
+### 9.1 Prasyarat sekali jalan
+
+1. **Bucket Supabase Storage**: buat bucket `system-backups` (private) di project Supabase.
+2. **GitHub Secrets** (repo `sabar2023/robot-otomatis`): pastikan `SUPABASE_URL` dan `SUPABASE_SERVICE_KEY` ada di repo secrets (sudah dipakai workflow lain; workflow `duplicator-backup.yml` juga memerlukannya).
+3. **Cloudflare Worker secret**: `GITHUB_PAT` harus sudah ada di worker `bot-cron` (sudah ada untuk dispatch workflow). Worker juga butuh `SUPABASE_SERVICE_KEY` (sudah ada).
+4. Deploy worker setelah update kode:
+   ```bash
+   cd cloudflare/bot-cron
+   npx wrangler deploy
+   ```
+
+Tidak ada migrasi DB baru. Tidak ada secret baru selain yang sudah ada.
+
+### 9.2 Alur Backup (dari Admin Panel Flutter)
+
+1. Admin buka **Dashboard Admin** → bagian **Backup & Restore**.
+2. Klik **Backup Sekarang**.
+3. App memanggil `POST /admin/backup` di worker `bot-cron` dengan Bearer token admin Supabase.
+4. Worker memvalidasi admin via `requireAdmin()` lalu dispatch `workflow_dispatch` ke `duplicator-backup.yml` via GitHub API (`GITHUB_PAT`).
+5. GitHub Actions menjalankan `python3 tools/duplicator/backup.py --upload-supabase`:
+   - membuat arsip backup lengkap (DB, env, worker, workflows, engine) — sama seperti backup manual,
+   - upload arsip ke bucket Supabase Storage `system-backups`,
+   - menulis `SHA256`, `OBJECT_PATH` ke step summary.
+6. Admin klik **Refresh** di panel. App memanggil `GET /admin/backups`, worker list isi bucket `system-backups`.
+7. Untuk download, admin klik ikon download. App memanggil `GET /admin/backup-url?name=...`, worker membuat signed URL Supabase Storage (berlaku 10 menit), app membuka URL itu di browser/external app.
+
+### 9.3 Endpoint Worker baru
+
+Semua endpoint butuh `Authorization: Bearer <supabase_access_token>` milik admin (divalidasi `requireAdmin()`).
+
+| Endpoint | Method | Fungsi |
+|---|---|---|
+| `/admin/backups` | GET | List file `.tar.gz` di bucket `system-backups`, urut terbaru |
+| `/admin/backup` | POST | Dispatch workflow `duplicator-backup.yml` (ref `main`) |
+| `/admin/backup-url?name=<file>` | GET | Buat signed download URL (600 detik). Nama divalidasi ketat (tanpa `/`, `..`, harus `.tar.gz`) |
+
+Respons error umum: `401/403` bukan admin, `500 github_pat_missing`, `502` gagal ke GitHub/Supabase Storage.
+
+### 9.4 Restore via cPanel (`installer.php`)
+
+File: `tools/duplicator/cpanel/installer.php` — satu file PHP mandiri.
+
+**Cara pakai:**
+
+1. Download arsip backup `.tar.gz` dari Admin Panel (atau dari Supabase Storage).
+2. Upload `installer.php` ke folder web cPanel (mis. `public_html/restore/`).
+3. Buka `https://domain-anda/restore/installer.php` di browser.
+4. Buat password installer (disimpan sebagai hash di `.duplicator-installer-state.json` di folder yang sama).
+5. Upload arsip `.tar.gz`. Installer akan extract ke `.duplicator-extract/`.
+6. Isi kredensial Supabase target (project ref, db host/port/name/user/password, service role key). Klik **Jalankan Restore Supabase**.
+   - Restore `schema.sql` via `psql` (butuh `psql` tersedia di server; kebanyakan shared hosting tidak punya — lihat batasan).
+   - Import data public (SQL atau COPY dari CSV).
+   - Buat auth users via Supabase Admin API.
+   - Buat bucket + upload objek storage via Supabase Storage API.
+7. Isi GitHub repo + PAT. Installer akan set secrets/variables dari manifest + `env/.env.sanitized`.
+8. Isi Cloudflare Account ID, Worker name, API token. Installer deploy worker script dengan binding secret.
+9. Selesai — hapus `installer.php`, `.duplicator-installer-state.json`, `.duplicator-installer.log`, `.duplicator-extract/`, dan arsip backup dari server.
+
+**Keamanan installer:**
+- Password installer wajib, disimpan sebagai `password_hash()`.
+- Session-based auth + CSRF token di setiap form.
+- DB password, service role key, GitHub PAT, Cloudflare API token **tidak disimpan** di state file.
+- State file hanya menyimpan metadata non-sensitif (path arsip, project ref, host, repo, status langkah).
+- Hapus semua file installer setelah restore.
+
+### 9.5 Batasan cPanel/shared hosting
+
+- **`psql` tidak selalu ada** di shared hosting. Restore schema/data SQL butuh `psql`. Jika tidak ada, gunakan VPS sementara atau jalankan restore DB via `tools/duplicator/restore.py` di mesin dengan `psql`.
+- **`PharData`** harus aktif untuk extract `.tar.gz`. Umumnya aktif; jika tidak, extract manual lalu sesuaikan.
+- **`shell_exec/proc_open`** mungkin diblokir. Installer butuh `proc_open` untuk `psql`.
+- **`sodium`** extension dibutuhkan untuk enkripsi GitHub secrets. Umumnya aktif di PHP 7.2+.
+- **Upload size**: sesuaikan `upload_max_filesize` dan `post_max_size` di PHP config cPanel agar muat arsip backup.
+- **Timeout**: restore DB besar bisa kena `max_execution_time`. Jalankan dari PHP CLI atau naikkan limit bila memungkinkan.
+
+### 9.6 Troubleshooting
+
+| Gejala | Penyebab | Solusi |
+|---|---|---|
+| `github_pat_missing` dari `/admin/backup` | Secret `GITHUB_PAT` belum ada di worker | `wrangler secret put GITHUB_PAT` di `cloudflare/bot-cron` |
+| `storage_list_failed` | Bucket `system-backups` belum ada / key salah | Buat bucket private `system-backups` di Supabase Storage |
+| `dispatch_failed` 403 | PAT tidak punya akses Actions write | Pastikan PAT fine-grained punya Actions: Read & write untuk repo |
+| Backup workflow gagal upload | `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` secret repo kosong | Set di GitHub repo Settings → Secrets and variables → Actions |
+| Installer: `psql: command not found` | Shared hosting tanpa PostgreSQL client | Restore DB via VPS/mesin dengan psql, atau minta hosting enable psql |
+| Installer: extract gagal | `PharData`/`zlib` tidak aktif | Aktifkan ekstensi PHP Phar dan zlib di cPanel Select PHP Version |
+| Signed URL 400/404 | Nama file tidak valid / file dihapus | Refresh daftar backup, pastikan nama berakhiran `.tar.gz` |
+| Download tidak terbuka di app | URL launcher / browser blocked | Coba salin link dari browser; signed URL berlaku 10 menit |

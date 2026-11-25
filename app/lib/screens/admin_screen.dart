@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../theme.dart';
 import 'admin_content_screen.dart';
@@ -35,6 +36,9 @@ class _AdminScreenState extends State<AdminScreen> {
   Map<String, dynamic> _settings = {};
   final _bcCtrl = TextEditingController();
   bool _bcBusy = false;
+  bool _loadingBackups = false;
+  bool _triggeringBackup = false;
+  List<Map<String, dynamic>> _backups = [];
 
   final _settingKeys = [
     "trading_margin_mode",
@@ -98,12 +102,91 @@ class _AdminScreenState extends State<AdminScreen> {
         _setCtrls[k]!.text = (settingsMap[k] ?? "").toString();
       }
       setState(() => _loading = false);
+      await _loadBackups();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _err = "Gagal memuat: $e";
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadBackups() async {
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    if (token == null) return;
+    setState(() => _loadingBackups = true);
+    try {
+      final resp = await http.get(
+        Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/backups"),
+        headers: {"Authorization": "Bearer $token"},
+      );
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode >= 400) {
+        throw body["error"] ?? resp.body;
+      }
+      final items = (body["items"] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      if (mounted) setState(() => _backups = items);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal memuat backup: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingBackups = false);
+    }
+  }
+
+  Future<void> _triggerBackup() async {
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    if (token == null) return;
+    setState(() => _triggeringBackup = true);
+    try {
+      final resp = await http.post(
+        Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/backup"),
+        headers: {"Authorization": "Bearer $token"},
+      );
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode >= 400) {
+        throw body["error"] ?? resp.body;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Backup dimulai. Refresh beberapa menit lagi.")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal trigger backup: $e")));
+      }
+    } finally {
+      if (mounted) setState(() => _triggeringBackup = false);
+    }
+  }
+
+  Future<void> _downloadBackup(String name) async {
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    if (token == null) return;
+    try {
+      final resp = await http.get(
+        Uri.parse("https://bot-cron.sabar2023.workers.dev/admin/backup-url?name=${Uri.encodeQueryComponent(name)}"),
+        headers: {"Authorization": "Bearer $token"},
+      );
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode >= 400) {
+        throw body["error"] ?? resp.body;
+      }
+      final url = (body["url"] ?? "").toString();
+      if (url.isEmpty) throw "url_kosong";
+      final uri = Uri.parse(url);
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gagal membuka link download.")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal download: $e")));
+      }
     }
   }
 
@@ -362,6 +445,93 @@ class _AdminScreenState extends State<AdminScreen> {
                   ],
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text("Backup & Restore", style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                ),
+                TextButton.icon(
+                  onPressed: _loadingBackups ? null : _loadBackups,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text("Refresh"),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: panelCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Backup penuh sistem (DB, env, worker, workflows, engine). File disimpan di Supabase Storage bucket system-backups.",
+                    style: TextStyle(color: textMuted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _triggeringBackup ? null : _triggerBackup,
+                      icon: _triggeringBackup
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.backup_outlined),
+                      label: Text(_triggeringBackup ? "Memulai..." : "Backup Sekarang"),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_loadingBackups)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(child: CircularProgressIndicator(color: accentMain)),
+                    )
+                  else if (_backups.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text("Belum ada backup.", style: TextStyle(color: textMuted)),
+                    )
+                  else
+                    ..._backups.take(15).map((b) {
+                      final name = (b["name"] ?? "").toString();
+                      final created = (b["created_at"] ?? b["updated_at"] ?? "-").toString();
+                      final sizeRaw = b["size"];
+                      final sizeStr = sizeRaw is num ? "${(sizeRaw / (1024 * 1024)).toStringAsFixed(2)} MB" : "-";
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: bgPanelLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: borderSoft),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                                  const SizedBox(height: 2),
+                                  Text("$created • $sizeStr", style: const TextStyle(color: textMuted, fontSize: 11)),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: "Download",
+                              onPressed: name.isEmpty ? null : () => _downloadBackup(name),
+                              icon: const Icon(Icons.download_rounded),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 6),
